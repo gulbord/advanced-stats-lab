@@ -1,5 +1,6 @@
 library(rvest)
 library(tidyverse)
+library(ggrepel)
 
 men100m_html <- read_html("http://www.alltime-athletics.com/m_100ok.htm")
 men100m_list <- men100m_html |>
@@ -27,3 +28,25 @@ men100m_tbl$birth_date <- as.Date(men100m_tbl$birth_date,
                                   format = "%d.%m.%y")
 # also date of race
 men100m_tbl$date <- as.Date(men100m_tbl$date, format = "%d.%m.%Y")
+
+# get fastest runner each year
+timings <- men100m_tbl |>
+    mutate(year = as.numeric(format(date, "%Y"))) |>
+    group_by(year) |>
+    summarise(fastest = min(timing),
+              athlete = athlete[which.min(timing)],
+              country = country[which.min(timing)])
+
+font <- "Fira Sans Condensed"
+theme_set(theme_bw(base_size = 20, base_family = font))
+p1 <- ggplot(data = timings, aes(x = year, y = fastest)) +
+    stat_smooth(colour = "sienna4", fill = "sienna3", alpha = 0.3) +
+    geom_point(colour = "gray35", size = 2.5) +
+    geom_text_repel(aes(label = ifelse(fastest < 9.71, athlete, "")),
+                    size = 5.5, box.padding = 0.3, nudge_y = -0.01,
+                    family = font, colour = "gray35") +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
+    labs(x = "Year", y = "Fastest time (s)",
+         title = "Fastest man in the 100 m through the years",
+         caption = "Data: www.alltime-athletics.com") +
+    theme(plot.title = element_text(size = 28, face = "bold"))
