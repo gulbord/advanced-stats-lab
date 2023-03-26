@@ -1,6 +1,8 @@
 library(rvest)
 library(tidyverse)
 library(ggrepel)
+library(nord)
+library(countrycode)
 
 men100m_html <- read_html("http://www.alltime-athletics.com/m_100ok.htm")
 men100m_list <- men100m_html |>
@@ -50,3 +52,27 @@ p1 <- ggplot(data = timings, aes(x = year, y = fastest)) +
          title = "Fastest man in the 100 m through the years",
          caption = "Data: www.alltime-athletics.com") +
     theme(plot.title = element_text(size = 28, face = "bold"))
+
+timings <- filter(timings, year > 1980)
+timings$country <- countrycode(timings$country,
+                               origin = "iso3c",
+                               destination = "country.name")
+# Nigeria for some reason is not converted
+timings$country[is.na(timings$country)] <- "Nigeria"
+
+theme_set(theme_minimal(base_size = 20, base_family = font))
+p2 <- ggplot(data = timings, aes(x = year, fill = country)) +
+    geom_histogram(binwidth = 1, position = "stack", alpha = 1) +
+    scale_x_continuous(breaks = seq(1980, 2020, by = 5)) +
+    scale_fill_nord("algoma_forest") +
+    coord_cartesian(expand = FALSE, clip = "off") +
+    labs(x = "Year", fill = "Country",
+         title = "Nationality of the fastest man in the 100 m",
+         caption = "Data: www.alltime-athletics.com") +
+    theme(axis.text.y = element_blank(),
+          axis.title.y = element_blank(),
+          axis.ticks.x = element_line(linewidth = 0.8,
+                                      colour = "gray50"),
+          panel.grid = element_blank(),
+          plot.title = element_text(size = 28, face = "bold"),
+          plot.caption.position = "plot")
