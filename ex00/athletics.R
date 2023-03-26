@@ -38,7 +38,7 @@ timings <- men100m_tbl |>
               country = country[which.min(timing)])
 
 font <- "Fira Sans Condensed"
-theme_set(theme_bw(base_size = 20, base_family = font))
+theme_set(theme_light(base_size = 20, base_family = font))
 p1 <- ggplot(data = timings, aes(x = year, y = fastest)) +
     stat_smooth(colour = "sienna4", fill = "sienna3", alpha = 0.3) +
     geom_point(colour = "gray35", size = 2.5) +
