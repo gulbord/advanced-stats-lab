@@ -1,6 +1,7 @@
 library(rvest)
 library(tidyverse)
 library(ggrepel)
+library(ggimage)
 library(nord)
 library(countrycode)
 
@@ -39,26 +40,32 @@ timings <- men100m_tbl |>
               athlete = athlete[which.min(timing)],
               country = country[which.min(timing)])
 
+# add flags
+github <- "https://raw.githubusercontent.com/"
+flag_repo <- paste0(github, "HatScripts/circle-flags/gh-pages/flags/")
+
+timings <- timings |>
+    mutate(country = countrycode(country, "ioc", "iso2c"),
+           flag = paste0(flag_repo, tolower(country), ".svg"))
+
 font <- "Fira Sans Condensed"
 theme_set(theme_light(base_size = 20, base_family = font))
 p1 <- ggplot(data = timings, aes(x = year, y = fastest)) +
     stat_smooth(colour = "sienna4", fill = "sienna3", alpha = 0.3) +
     geom_point(colour = "gray35", size = 2.5) +
     geom_text_repel(aes(label = ifelse(fastest < 9.71, athlete, "")),
-                    size = 5.5, box.padding = 0.3, nudge_y = -0.01,
+                    size = 5.5, box.padding = 0.5, nudge_y = -0.01,
                     family = font, colour = "gray35") +
+    geom_image(aes(image = flag), size = 0.02, asp = 1.6) +
     scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +
     labs(x = "Year", y = "Fastest time (s)",
          title = "Fastest man in the 100 m through the years",
          caption = "Data: www.alltime-athletics.com") +
     theme(plot.title = element_text(size = 28, face = "bold"))
 
-timings <- filter(timings, year > 1980)
-timings$country <- countrycode(timings$country,
-                               origin = "iso3c",
-                               destination = "country.name")
-# Nigeria for some reason is not converted
-timings$country[is.na(timings$country)] <- "Nigeria"
+timings <- timings |>
+    filter(year > 1980) |>
+    mutate(country = countrycode(country, "iso2c", "country.name"))
 
 theme_set(theme_minimal(base_size = 20, base_family = font))
 p2 <- ggplot(data = timings, aes(x = year, fill = country)) +
