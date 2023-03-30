@@ -1,4 +1,6 @@
 library(tidyverse)
+font <- "Fira Sans Condensed"
+theme_set(theme_bw(base_size = 20, base_family = font))
 
 # read data and import to tibble
 names <- c("month", "year", "full_time", "part_time", "total")
@@ -14,18 +16,27 @@ united <- read_table("data/united_airline_empl.txt",
 # merge the four tibbles [https://stackoverflow.com/a/41620524]
 employees <- list(american = american, delta = delta,
                   federal = federal, united = united) |>
-    bind_rows(.id = "company")
+    bind_rows(.id = "company") |>
+    # combine month and year to a single date column
+    mutate(month = make_date(year = year, month = month)) |>
+    select(-year)
 
-# colours from each company’s palette
-comp_cols <- list(american = c("#0078d2", "#c30019"),
-                  delta = c("#e3132c", "#9b1631"),
-                  federal = c("#4d148c", "#ff6600"),
-                  united = c("#0033ab", "#00244d"))
-comp_names <- names(comp_cols)
+# assign long names for plot labels
+full_names <- list(american = "American Airlines",
+                   delta = "Delta Airlines",
+                   federal = "Federal Express",
+                   united = "United Airlines")
+job_type <- list(full_time = "Full-time",
+                 part_time = "Part-time",
+                 total = "Total")
 
-empl_plots <- vector(length = 4)
-for (i in 1:4) {
-    empl_plots <- employees |>
-        filter(company == comp_names[i])
-        gather("type", "number", c("full_time", "part_time"))
-}
+# plot full-time, part-time and total employees as a function of time
+empl_plots <- lapply(names(job_type), function(col) {
+    employees |>
+    ggplot(aes(x = month, y = .data[[col]], colour = company)) +
+        geom_line(linewidth = 1) +
+        scale_colour_manual(values = unname(palette.colors(4, "Okabe-Ito")),
+                            labels = full_names) +
+        labs(x = "Year", y = "Number of employees", colour = "Company",
+             title = paste(job_type[[col]], "employees"))
+})
