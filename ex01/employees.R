@@ -26,17 +26,29 @@ full_names <- list(american = "American Airlines",
                    delta = "Delta Airlines",
                    federal = "Federal Express",
                    united = "United Airlines")
-job_type <- list(full_time = "Full-time",
-                 part_time = "Part-time",
+job_type <- list(full_time = "Full-Time",
+                 part_time = "Part-Time",
                  total = "Total")
 
 # plot full-time, part-time and total employees as a function of time
 empl_plots <- lapply(names(job_type), function(col) {
     employees |>
-    ggplot(aes(x = month, y = .data[[col]], colour = company)) +
+    ggplot(aes(x = month, y = .data[[col]], color = company)) +
         geom_line(linewidth = 1) +
-        scale_colour_manual(values = unname(palette.colors(4, "Okabe-Ito")),
-                            labels = full_names) +
-        labs(x = "Year", y = "Number of employees", colour = "Company",
-             title = paste(job_type[[col]], "employees"))
+        scale_color_manual(values = unname(palette.colors(4, "Okabe-Ito")),
+                           labels = full_names) +
+        labs(x = "Year", y = "Number of employees", color = "Company",
+             title = paste(job_type[[col]], "Employees"))
 })
+
+# plot the fraction of part-time workers over the total employees
+# as a function of time
+ptime_frac <- employees |>
+    mutate(part_time = part_time / total) |>
+    ggplot(aes(x = month, y = part_time, color = company)) +
+        geom_line(linewidth = 1) +
+        scale_color_manual(values = unname(palette.colors(4, "Okabe-Ito")),
+                           labels = full_names) +
+        labs(x = "Year", y = "Fraction of part-time employees",
+             color = "Company",
+             title = "Fraction of Part-Time Employees Through the Years")
