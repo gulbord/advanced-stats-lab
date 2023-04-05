@@ -41,6 +41,12 @@ empl_plots <- lapply(names(job_type), function(idx) {
              title = paste(job_type[[idx]], "Employees"))
 })
 
+# when did each company reach the minimum and maximum number of employees?
+employees |>
+    group_by(company) |>
+    summarise(min = min(total), when_min = month[which.min(total)],
+              max = max(total), when_max = month[which.min(total)])
+
 # plot the fraction of part-time workers over the total employees
 # as a function of time
 ptime_frac <- employees |>
