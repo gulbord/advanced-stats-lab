@@ -31,14 +31,14 @@ job_type <- list(full_time = "Full-Time",
                  total = "Total")
 
 # plot full-time, part-time and total employees as a function of time
-empl_plots <- lapply(names(job_type), function(col) {
+empl_plots <- lapply(names(job_type), function(idx) {
     employees |>
-    ggplot(aes(x = month, y = .data[[col]], color = company)) +
+    ggplot(aes(x = month, y = .data[[idx]], color = company)) +
         geom_line(linewidth = 1) +
         scale_color_manual(values = unname(palette.colors(4, "Okabe-Ito")),
                            labels = full_names) +
         labs(x = "Year", y = "Number of employees", color = "Company",
-             title = paste(job_type[[col]], "Employees"))
+             title = paste(job_type[[idx]], "Employees"))
 })
 
 # plot the fraction of part-time workers over the total employees
