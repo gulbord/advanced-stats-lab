@@ -1,6 +1,7 @@
 library(tidyverse)
 font <- "Fira Sans Condensed"
 theme_set(theme_bw(base_size = 20, base_family = font))
+my_palette <- unname(palette.colours(4, "Okabe-Ito"))
 
 # read data and import to tibble
 names <- c("month", "year", "full_time", "part_time", "total")
@@ -33,28 +34,26 @@ job_type <- list(full_time = "Full-Time",
 # plot full-time, part-time and total employees as a function of time
 empl_plots <- lapply(names(job_type), function(idx) {
     employees |>
-    ggplot(aes(x = month, y = .data[[idx]], color = company)) +
+    ggplot(aes(x = month, y = .data[[idx]], colour = company)) +
         geom_line(linewidth = 1) +
-        scale_color_manual(values = unname(palette.colors(4, "Okabe-Ito")),
-                           labels = full_names) +
-        labs(x = "Year", y = "Number of employees", color = "Company",
+        scale_colour_manual(values = my_palette, labels = full_names) +
+        labs(x = "Year", y = "Number of employees", colour = "Company",
              title = paste(job_type[[idx]], "Employees"))
 })
 
 # when did each company reach the minimum and maximum number of employees?
 employees |>
     group_by(company) |>
-    summarise(min = min(total), when_min = month[which.min(total)],
+    summarize(min = min(total), when_min = month[which.min(total)],
               max = max(total), when_max = month[which.min(total)])
 
 # plot the fraction of part-time workers over the total employees
 # as a function of time
 ptime_frac <- employees |>
     mutate(part_time = part_time / total) |>
-    ggplot(aes(x = month, y = part_time, color = company)) +
+    ggplot(aes(x = month, y = part_time, colour = company)) +
         geom_line(linewidth = 1) +
-        scale_color_manual(values = unname(palette.colors(4, "Okabe-Ito")),
-                           labels = full_names) +
+        scale_colour_manual(values = my_palette, labels = full_names) +
         labs(x = "Year", y = "Fraction of part-time employees",
-             color = "Company",
+             colour = "Company",
              title = "Fraction of Part-Time Employees Through the Years")
