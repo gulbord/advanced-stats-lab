@@ -1,0 +1,56 @@
+---
+title: "R Laboratory – Exercise 1"
+author: "Guglielmo Bordin"
+date: "`r format(Sys.Date(), '%d/%m/%Y')`"
+output:
+    html_document:
+        toc: true
+        toc_float: true
+        theme: readable
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(message = FALSE)
+```
+
+# American Airlines Employees
+## Reading Data
+We begin by importing the `tidyverse` and setting `ggplot`-related stuff.
+```{r}
+library(tidyverse)
+font <- "Fira Sans Condensed"
+theme_set(theme_bw(base_size = 20, base_family = font))
+```
+Now we can start importing data. Let’s first put each company’s data in a
+separate tibble, and then merge them in a single one, adding a column with
+the company name. Also, we’ll combine the `month` and `year` columns into 
+a single date column (labeled as `month`).
+```{r}
+names <- c("month", "year", "full_time", "part_time", "total")
+american <- read_table("data/american_airline_empl.txt",
+                       skip = 1, col_names = names)
+delta <- read_table("data/delta_airline_empl.txt",
+                    skip = 1, col_names = names)
+federal <- read_table("data/federal_express_empl.txt",
+                      skip = 1, col_names = names)
+united <- read_table("data/united_airline_empl.txt",
+                      skip = 1, col_names = names)
+
+# start with a named list to recover the names when binding rows
+(employees <- list(american = american, delta = delta,
+                   federal = federal, united = united) |>
+    bind_rows(.id = "company") |>
+    mutate(month = lubridate::make_date(year = year, month = month)) |>
+    select(-year))
+```
+We’ll also keep track of properly-typeset company and job names, to use 
+in the plot labels later.
+```{r}
+full_names <- list(american = "American Airlines",
+                   delta = "Delta Airlines",
+                   federal = "Federal Express",
+                   united = "United Airlines")
+job_type <- list(full_time = "Full-Time",
+                 part_time = "Part-Time",
+                 total = "Total")
+```
