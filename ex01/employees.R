@@ -1,7 +1,7 @@
 library(tidyverse)
 font <- "Fira Sans Condensed"
 theme_set(theme_bw(base_size = 20, base_family = font))
-my_palette <- unname(palette.colours(4, "Okabe-Ito"))
+my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 
 # read data and import to tibble
 names <- c("month", "year", "full_time", "part_time", "total")
