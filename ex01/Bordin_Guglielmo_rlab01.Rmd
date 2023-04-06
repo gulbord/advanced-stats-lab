@@ -3,7 +3,7 @@ title: "R Laboratory – Exercise 1"
 author: "Guglielmo Bordin"
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
-    rmdformats::material:
+    rmdformats::robobook:
         fig_width: 8
         fig_height: 5
         thumbnails: false
@@ -21,7 +21,7 @@ We begin by importing the `tidyverse` and setting `ggplot`-related stuff.
 ```{r}
 library(tidyverse)
 font <- "Fira Sans Condensed"
-theme_set(theme_bw(base_size = 16, base_family = font))
+theme_set(theme_minimal(base_size = 16, base_family = font))
 my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 ```
 Now we can start importing data. Let’s first put each company’s data in a
@@ -40,11 +40,14 @@ united <- read_table("data/united_airline_empl.txt",
                       skip = 1, col_names = names)
 
 # start with a named list to recover the names when binding rows
-(employees <- list(american = american, delta = delta,
+employees <- list(american = american, delta = delta,
                    federal = federal, united = united) |>
     bind_rows(.id = "company") |>
     mutate(month = lubridate::make_date(year = year, month = month)) |>
-    select(-year))
+    select(-year)
+```
+```{r, echo = FALSE, results = "asis"}
+knitr::kable(head(employees), caption = "`employees` tibble")
 ```
 We’ll also keep track of properly-typeset version of the company and jobs
 names, to use them later in the plots.
@@ -78,10 +81,13 @@ maximum number of employees, we can directly work on `employees` with the
 `dplyr` functions `group_by` and `summarise`.
 
 ```{r}
-(minmax <- employees |>
+minmax <- employees |>
     group_by(company) |>
     summarize(min = min(total), when_min = month[which.min(total)],
-              max = max(total), when_max = month[which.max(total)]))
+              max = max(total), when_max = month[which.max(total)])
+```
+```{r, echo = FALSE, results = "asis"}
+knitr::kable(minmax)
 ```
 
 Here we’ll plot the evolution in time of the fraction of part-time workers
@@ -92,9 +98,7 @@ employees |>
     ggplot(aes(x = month, y = part_time, colour = company)) +
         geom_line(linewidth = 0.8) +
         scale_colour_manual(values = my_palette, labels = full_names) +
-        labs(x = "Year", y = "Part-time employees [%]",
-             colour = "Company",
-             title = "Fraction of part-time employees through the years")
+        labs(x = "Year", y = "Part-time employees [%]", colour = "Company")
 ```
 
 ## COVID-19 Effect
@@ -111,8 +115,7 @@ employees |>
                    linewidth = 0.6) +
         scale_linetype_manual(name = "", values = rep("dashed", 4)) +
         scale_colour_manual(values = my_palette, labels = full_names) +
-        labs(x = "Year", y = "Number of employees", colour = "Company",
-             title = "Evolution of the workforce in the COVID years")
+        labs(x = "Year", y = "Number of employees", colour = "Company")
 ```
 
 We see indeed that two out of four companies – Delta and United – took a 
@@ -128,3 +131,32 @@ corporation that focuses on basically every aspect of transportation, not
 simply passenger air travel like the other three companies.
 
 # New York City Flights
+The data we want to analyse here comes from the `nycflights13` package.
+
+```{r}
+library(nycflights13)
+```
+
+First, let’s have a look at the four tibbles in the dataset.
+```{r, echo = FALSE, results = "asis"}
+knitr::kable(head(airlines), caption = "`airlines` tibble")
+knitr::kable(head(airports), caption = "`airports` tibble")
+knitr::kable(head(flights), caption = "`flights` tibble")
+knitr::kable(head(planes), caption = "`planes` tibble")
+```
+
+Now we’ll plot the total number of flights departing from each of the 
+three NYC airports (JFK, LGA and EWR) as a function of time.
+```{r}
+flights |>
+    filter(origin %in% c("JFK", "LGA", "EWR")) |>
+    mutate(date = lubridate::make_date(year, month, day)) |>
+    dplyr::count(date, origin) |>
+    ggplot(aes(x = date, y = n, colour = origin)) +
+        geom_point(size = 0.8) +
+        geom_smooth(aes(fill = origin), linewidth = 0.8) +
+        scale_colour_manual(values = my_palette) +
+        scale_fill_manual(values = my_palette, guide = "none") +
+        labs(x = "Date", y = "Number of flights", colour = "Airport") +
+        guides(colour = guide_legend(override.aes = list(fill = NA)))
+```
