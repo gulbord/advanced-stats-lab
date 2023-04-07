@@ -1,9 +1,9 @@
 ---
-title: "R Laboratory – Exercise 1"
-author: "Guglielmo Bordin"
+title: R Laboratory – Exercise 1
+author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
-    rmdformats::robobook:
+    rmdformats::readthedown:
         fig_width: 8
         fig_height: 5
         thumbnails: false
@@ -20,8 +20,8 @@ knitr::opts_chunk$set(message = FALSE, dev = "svg")
 We begin by importing the `tidyverse` and setting `ggplot`-related stuff.
 ```{r}
 library(tidyverse)
-font <- "Fira Sans Condensed"
-theme_set(theme_minimal(base_size = 16, base_family = font))
+font <- "Lato"
+theme_set(theme_minimal(base_size = 14, base_family = font))
 my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 ```
 Now we can start importing data. Let’s first put each company’s data in a
@@ -78,7 +78,7 @@ lapply(names(job_type), function(idx) {
 
 To answer the question of when did each company reach the minimum and 
 maximum number of employees, we can directly work on `employees` with the 
-`dplyr` functions `group_by` and `summarise`.
+`dplyr` functions `group_by` and `summarize`.
 
 ```{r}
 minmax <- employees |>
