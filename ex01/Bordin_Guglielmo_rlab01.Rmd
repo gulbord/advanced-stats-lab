@@ -17,17 +17,23 @@ knitr::opts_chunk$set(message = FALSE, dev = "svg")
 
 # American Airlines Employees
 ## Reading Data
-We begin by importing the `tidyverse` and setting `ggplot`-related stuff.
+We begin by importing the necessary packages and setting `ggplot`-related
+stuff.
+
 ```{r}
 library(tidyverse)
+library(kableExtra)
+
 font <- "Lato"
 theme_set(theme_minimal(base_size = 14, base_family = font))
 my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 ```
+
 Now we can start importing data. Let’s first put each company’s data in a
 separate tibble, and then merge them in a single one, adding a column with
 the company name. Also, we’ll combine the `month` and `year` columns into 
 a single date column (labeled as `month`).
+
 ```{r}
 names <- c("month", "year", "full_time", "part_time", "total")
 american <- read_table("data/american_airline_empl.txt",
@@ -46,11 +52,13 @@ employees <- list(american = american, delta = delta,
     mutate(month = make_date(year = year, month = month)) |>
     select(-year)
 ```
-```{r, echo = FALSE, results = "asis"}
-knitr::kable(head(employees), caption = "`employees` tibble")
+```{r, echo = FALSE}
+kbl(head(employees), caption = "`employees` tibble")
 ```
+
 We’ll also keep track of properly-typeset version of the company and jobs
 names, to use them later in the plots.
+
 ```{r}
 full_names <- list(american = "American Airlines",
                    delta = "Delta Airlines",
@@ -65,6 +73,7 @@ job_type <- list(full_time = "Full-time",
 Here we’ll generate a plot of the number of employees in time, for all 
 four companies. We’ll keep the full-time and part-time workers’ numbers
 separated, and also produce a plot with the total.
+
 ```{r}
 lapply(names(job_type), function(idx) {
     employees |>
@@ -87,11 +96,12 @@ minmax <- employees |>
               max = max(total), when_max = month[which.max(total)])
 ```
 ```{r, echo = FALSE, results = "asis"}
-knitr::kable(minmax)
+kbl(minmax) |> kable_styling(full_width = FALSE, position = "center")
 ```
 
 Here we’ll plot the evolution in time of the fraction of part-time workers
 over the total workforce of each company.
+
 ```{r}
 employees |>
     mutate(part_time = 100 * part_time / total) |>
@@ -105,6 +115,7 @@ employees |>
 To analyse the influence of the COVID-19 pandemic, we can zoom in on the
 period from 2019 to 2023 in the total workforce’s plot. We also add a 
 reference line with the previously-found historic minima of the workforce.
+
 ```{r}
 employees |>
     filter(lubridate::year(month) > 2018) |>
@@ -138,15 +149,17 @@ library(nycflights13)
 ```
 
 First, let’s have a look at the four tibbles in the dataset.
+
 ```{r, echo = FALSE, results = "asis"}
-knitr::kable(head(airlines), caption = "`airlines` tibble")
-knitr::kable(head(airports), caption = "`airports` tibble")
-knitr::kable(head(flights), caption = "`flights` tibble")
-knitr::kable(head(planes), caption = "`planes` tibble")
+kbl(head(airlines), caption = "`airlines` tibble")
+kbl(head(airports), caption = "`airports` tibble")
+kbl(head(flights), caption = "`flights` tibble")
+kbl(head(planes), caption = "`planes` tibble")
 ```
 
 Now we’ll plot the total number of flights departing from each of the 
 three NYC airports (JFK, LGA and EWR) as a function of time.
+
 ```{r}
 flights$date <- as_date(flights$time_hour)
 
@@ -163,6 +176,7 @@ flights |>
 
 Another plot: this time, the average number of flights in the working days
 of a week, as a function of the week number in the year. 
+
 ```{r}
 somecols <- c("#297383", "#8bc5cd")
 flights |>
@@ -178,5 +192,28 @@ flights |>
                     alpha = 0.8, colour = "transparent",
                     fill = somecols[2]) +
         geom_line(colour = somecols[1], lwd = 0.8) +
-        labs(x = "Week", y = "Average flights per day")
+        labs(x = "Week", y = "Average flights per (work)day")
+```
+
+We can notice a big dip around the 20th and 30th week, one next to the 50th
+and another in the last. The last dip is clearly caused by Christmas and 
+New Year’s eve, while the other two line up perfectly with the US
+Independence Day on the 4th of July (`r week("2013-07-04")`th week of
+the year) and Thanksgiving, which in 2013 was on the 28th of November
+(`r week("2013-11-28")`th week of the year). Indeed:
+
+```{r, echo = FALSE}
+by_week <- flights |> count(week = week(date))
+
+ind_day <- week("2013-07-04")
+thnxgiv <- week("2013-11-28")
+
+by_week[(ind_day - 2):(ind_day + 2), ] |>
+    kbl(caption = "Flights by week around July 4th",
+        table.attr = "style='width:40%;'") |>
+    kable_styling(full_width = TRUE, position = "center")
+by_week[(thnxgiv - 2):(thnxgiv + 2), ] |>
+    kbl(caption = "Flights by week around Thanksgiving",
+        table.attr = "style='width:40%;'") |>
+    kable_styling(full_width = TRUE, position = "center")
 ```
