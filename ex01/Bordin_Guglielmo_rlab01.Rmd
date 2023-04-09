@@ -21,8 +21,8 @@ We begin by importing the necessary packages and setting `ggplot`-related
 stuff.
 
 ```{r}
-library(tidyverse)
 library(kableExtra)
+library(tidyverse)
 
 font <- "Lato"
 theme_set(theme_minimal(base_size = 14, base_family = font))
@@ -192,7 +192,7 @@ flights |>
     summarize(avg = mean(n)) |>
     ggplot(aes(x = week, y = avg, colour = day_type)) +
         geom_line(lwd = 0.8) +
-        scale_colour_manual(values = c(wend_col, wday_col),
+        scale_colour_manual(values = my_palette,
                             labels = c("Weekends", "Workdays")) +
         labs(x = "Week", y = "Average flights per day",
              colour = "Day type")
@@ -239,8 +239,9 @@ flights |>
               min = min(dep_delay),
               max = max(dep_delay)) |>
     ggplot(aes(x = date, y = avg, colour = origin)) +
-        geom_ribbon(aes(fill = origin),
+        geom_ribbon(aes(fill = origin, ymin = min, ymax = max),
                     alpha = 0.5, color = "transparent") +
         geom_line(lwd = 0.8) +
-        scale_colour_manual()
+        scale_fill_manual(values = my_palette) +
+        scale_colour_manual(values = my_palette)
 ```
