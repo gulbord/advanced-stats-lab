@@ -146,6 +146,8 @@ The data we want to analyse here comes from the `nycflights13` package.
 
 ```{r}
 library(nycflights13)
+library(rcartocolor)
+my_palette <- carto_pal(10, "Safe")[1:3]
 ```
 
 First, let’s have a look at the four tibbles in the dataset.
@@ -157,6 +159,7 @@ kbl(head(flights), caption = "`flights` tibble")
 kbl(head(planes), caption = "`planes` tibble")
 ```
 
+## Flights per Day
 Now we’ll plot the total number of flights departing from each of the 
 three NYC airports (JFK, LGA and EWR) as a function of time.
 
@@ -174,46 +177,70 @@ flights |>
         guides(colour = guide_legend(override.aes = list(fill = NA)))
 ```
 
-Another plot: this time, the average number of flights in the working days
-of a week, as a function of the week number in the year. 
+Another plot: this time, the average number of flights per day in a week,
+keeping working days and weekends separate, as a function of the week
+number in the year.
 
 ```{r}
-somecols <- c("#297383", "#8bc5cd")
 flights |>
-    # get weekday and remove saturdays and sundays
-    filter(!(wday(date) %in% c(1, 7))) |>
-    # count flights by day and keep week number
-    count(week = week(date), day) |>
-    # regroup by week to get average by day
-    group_by(week) |>
-    summarize(avg = mean(n), sd = sd(n)) |>
-    ggplot(aes(x = week, y = avg)) +
-        geom_ribbon(aes(ymin = avg - sd, ymax = avg + sd),
-                    alpha = 0.8, colour = "transparent",
-                    fill = somecols[2]) +
-        geom_line(colour = somecols[1], lwd = 0.8) +
-        labs(x = "Week", y = "Average flights per (work)day")
+    mutate(day_type = ifelse(wday(date) %in% c(1, 7),
+                             "weekend", "workday")) |>
+    # count by day, keeping info on week and day_type
+    count(week = week(date), day, day_type) |>
+    # regroup by week and day_type to get the averages we want
+    group_by(week, day_type) |>
+    summarize(avg = mean(n)) |>
+    ggplot(aes(x = week, y = avg, colour = day_type)) +
+        geom_line(lwd = 0.8) +
+        scale_colour_manual(values = c(wend_col, wday_col),
+                            labels = c("Weekends", "Workdays")) +
+        labs(x = "Week", y = "Average flights per day",
+             colour = "Day type")
 ```
 
-We can notice a big dip around the 20th and 30th week, one next to the 50th
-and another in the last. The last dip is clearly caused by Christmas and 
-New Year’s eve, while the other two line up perfectly with the US
-Independence Day on the 4th of July (`r week("2013-07-04")`th week of
-the year) and Thanksgiving, which in 2013 was on the 28th of November
+Looking at the workdays’ plot, we can notice a big dip around the 20th and 30th
+week, one next to the 50th and another in the last. The last dip is clearly
+caused by Christmas and New Year’s eve, while the other two line up perfectly
+with the US Independence Day on the 4th of July (`r week("2013-07-04")`th week
+of the year) and Thanksgiving, which in 2013 was on the 28th of November 
 (`r week("2013-11-28")`th week of the year). Indeed:
 
 ```{r, echo = FALSE}
-by_week <- flights |> count(week = week(date))
+by_week <- flights |>
+    filter(wday(date) %in% 2:6) |>
+    count(week = week(date))
 
 ind_day <- week("2013-07-04")
 thnxgiv <- week("2013-11-28")
 
 by_week[(ind_day - 2):(ind_day + 2), ] |>
-    kbl(caption = "Flights by week around July 4th",
+    kbl(caption = "Flights in the workweeks around July 4th",
         table.attr = "style='width:40%;'") |>
     kable_styling(full_width = TRUE, position = "center")
 by_week[(thnxgiv - 2):(thnxgiv + 2), ] |>
-    kbl(caption = "Flights by week around Thanksgiving",
+    kbl(caption = "Flights in the workweeks around Thanksgiving",
         table.attr = "style='width:40%;'") |>
     kable_styling(full_width = TRUE, position = "center")
+```
+
+In the case of Thanksgiving in particular, the decrease in the workday
+average is coupled to a sharp increase in the flights over the weekend.
+Elsewhere, the weekends present some big dips in some not-so-easily
+explainable parts of the calendar, but this is perhaps simply a matter of
+less data – we’re averaging over two days instead of five – leading to 
+larger fluctuations.
+
+# Departure Delays
+```{r}
+flights |>
+    drop_na(dep_delay) |>
+    group_by(date, origin) |>
+    summarize(avg = mean(dep_delay),
+              min = min(dep_delay),
+              max = max(dep_delay)) |>
+    ggplot(aes(x = date, y = avg, colour = origin)) +
+        geom_ribbon(aes(fill = origin),
+                    alpha = 0.5, color = "transparent") +
+        geom_line(lwd = 0.8) +
+        scale_colour_manual()
 ```
