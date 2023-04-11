@@ -3,7 +3,7 @@ title: R Laboratory – Exercise 1
 author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
-    rmdformats::readthedown:
+    rmdformats::robobook:
         fig_width: 8
         fig_height: 5
         thumbnails: false
@@ -24,7 +24,7 @@ stuff.
 library(kableExtra)
 library(tidyverse)
 
-font <- "Lato"
+font <- "Roboto Condensed"
 theme_set(theme_minimal(base_size = 14, base_family = font))
 my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 ```
@@ -118,7 +118,7 @@ reference line with the previously-found historic minima of the workforce.
 
 ```{r}
 employees |>
-    filter(lubridate::year(month) > 2018) |>
+    dplyr::filter(year(month) > 2018) |>
     ggplot(aes(x = month, y = total, colour = company)) +
         geom_line(lwd = 0.8) +
         geom_hline(aes(yintercept = min, colour = company,
@@ -207,7 +207,7 @@ of the year) and Thanksgiving, which in 2013 was on the 28th of November
 
 ```{r, echo = FALSE}
 by_week <- flights |>
-    filter(wday(date) %in% 2:6) |>
+    dplyr::filter(wday(date) %in% 2:6) |>
     count(week = week(date))
 
 ind_day <- week("2013-07-04")
@@ -215,11 +215,11 @@ thnxgiv <- week("2013-11-28")
 
 by_week[(ind_day - 2):(ind_day + 2), ] |>
     kbl(caption = "Flights in the workweeks around July 4th",
-        table.attr = "style='width:40%;'") |>
+        table.attr = "style='width:50%;'") |>
     kable_styling(full_width = TRUE, position = "center")
 by_week[(thnxgiv - 2):(thnxgiv + 2), ] |>
     kbl(caption = "Flights in the workweeks around Thanksgiving",
-        table.attr = "style='width:40%;'") |>
+        table.attr = "style='width:50%;'") |>
     kable_styling(full_width = TRUE, position = "center")
 ```
 
@@ -230,18 +230,55 @@ explainable parts of the calendar, but this is perhaps simply a matter of
 less data – we’re averaging over two days instead of five – leading to 
 larger fluctuations.
 
-# Departure Delays
+## Departure Delays
+Now, let’s examine the trend in the departure delays. We’ll calculate the 
+minimum, maximum and average delay for each day of the year, keeping the
+three airports’ data separate.
 ```{r}
-flights |>
+dep_delays <- flights |>
+    # some flights don’t have a recorded departure and/or arrival time
     drop_na(dep_delay) |>
     group_by(date, origin) |>
     summarize(avg = mean(dep_delay),
               min = min(dep_delay),
-              max = max(dep_delay)) |>
-    ggplot(aes(x = date, y = avg, colour = origin)) +
-        geom_ribbon(aes(fill = origin, ymin = min, ymax = max),
-                    alpha = 0.5, color = "transparent") +
-        geom_line(lwd = 0.8) +
-        scale_fill_manual(values = my_palette) +
-        scale_colour_manual(values = my_palette)
+              max = max(dep_delay))
+
+plot_delays <- function(key) {
+    names <- c(
+        "Maximum" = "max",
+        "Minimum" = "min",
+        "Average" = "avg"
+    )
+
+    ggplot(dep_delays, aes(x = date, y = .data[[names[key]]],
+                           colour = origin)) +
+        geom_point(size = 0.8) +
+        geom_smooth(aes(fill = origin), lwd = 0.8) +
+        scale_colour_manual(values = my_palette) +
+        scale_fill_manual(values = my_palette, guide = "none") +
+        labs(x = "Date", y = paste(key, "departure delay [min]"),
+            colour = "Airport") +
+        guides(colour = guide_legend(override.aes = list(fill = NA)))
+}
 ```
+
+Let’s examine the average delay first.
+
+```{r}
+plot_delays("Average")
+```
+
+It’s difficult to identify any noteworthy trend – perhaps only a slight 
+increase of the delays in the summer months, which is reasonable.
+Also, there’s not a significant difference between the three airports.
+
+Now, let’s look at the maxima and minima.
+
+```{r}
+plot_delays("Maximum")
+plot_delays("Minimum")
+```
+
+Nothing too significant here too.
+
+## Plane Speed
