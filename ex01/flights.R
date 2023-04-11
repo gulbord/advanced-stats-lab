@@ -7,8 +7,8 @@ my_palette <- unname(palette.colors(4, "Okabe-Ito"))
 
 flights |>
     filter(origin %in% c("JFK", "LGA", "EWR")) |>
-    mutate(date = lubridate::make_date(year, month, day)) |>
-    dplyr::count(date, origin) |>
+    mutate(date = make_date(year, month, day)) |>
+    count(date, origin) |>
     ggplot(aes(x = date, y = n, colour = origin)) +
         geom_point(size = 0.8) +
         geom_smooth(aes(fill = origin), linewidth = 0.8) +
