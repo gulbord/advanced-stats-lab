@@ -70,8 +70,8 @@ job_type <- list(full_time = "Full-time",
 ```
 
 ## Full-Time vs Part-Time Employees
-Here we’ll generate a plot of the number of employees in time, for all 
-four companies. We’ll keep the full-time and part-time workers’ numbers
+Here we’ll generate a plot of the number of employees in time, for all four
+companies. We’ll keep the full-time and part-time workers’ numbers
 separated, and also produce a plot with the total.
 
 ```{r}
@@ -135,9 +135,9 @@ almost to an all-time low, especially for Delta. American apparently felt
 the crisis a bit less, but we can still observe a dip before the start of
 2021.
 
-Federal Express is, on the other hand, in complete contrast with the 
-other three companies: its workforce even *grew* in the pandemic period.
-This is perhaps not that surprising if we consider that FedEx is a giant
+Federal Express is, on the other hand, in complete contrast with the other
+three companies: its workforce even *grew* in the pandemic period. This is
+perhaps not that surprising if we consider that FedEx is a giant
 corporation that focuses on basically every aspect of transportation, not 
 simply passenger air travel like the other three companies.
 
@@ -198,12 +198,13 @@ flights |>
              colour = "Day type")
 ```
 
-Looking at the workdays’ plot, we can notice a big dip around the 20th and 30th
-week, one next to the 50th and another in the last. The last dip is clearly
-caused by Christmas and New Year’s eve, while the other two line up perfectly
-with the US Independence Day on the 4th of July (`r week("2013-07-04")`th week
-of the year) and Thanksgiving, which in 2013 was on the 28th of November 
-(`r week("2013-11-28")`th week of the year). Indeed:
+Looking at the workdays’ plot, we can notice a big dip around the 20th and
+30th week, one next to the 50th and another in the last. The last dip is
+clearly caused by Christmas and New Year’s eve, while the other two line up
+perfectly with the US Independence Day on the 4th of July
+(`r week("2013-07-04")`th week of the year) and Thanksgiving, which in 2013
+was on the 28th of November (`r week("2013-11-28")`th week of the year).
+Indeed:
 
 ```{r, echo = FALSE}
 by_week <- flights |>
@@ -234,6 +235,7 @@ larger fluctuations.
 Now, let’s examine the trend in the departure delays. We’ll calculate the 
 minimum, maximum and average delay for each day of the year, keeping the
 three airports’ data separate.
+
 ```{r}
 dep_delays <- flights |>
     # some flights don’t have a recorded departure and/or arrival time
@@ -269,8 +271,8 @@ plot_delays("Average")
 ```
 
 It’s difficult to identify any noteworthy trend – perhaps only a slight 
-increase of the delays in the summer months, which is reasonable.
-Also, there’s not a significant difference between the three airports.
+increase of the delays in the summer months, which is reasonable. Also,
+there’s not a significant difference between the three airports.
 
 Now, let’s look at the maxima and minima.
 
