@@ -1,7 +1,7 @@
 library(tidyverse)
 library(nycflights13)
 
-font <- "Lato"
+font <- "Roboto Condensed"
 theme_set(theme_minimal(base_size = 14, base_family = font))
 my_palette <- rcartocolor::carto_pal(10, "Safe")[1:3]
 
@@ -69,8 +69,8 @@ plot_delays <- function(key) {
         geom_smooth(aes(fill = origin), lwd = 0.8) +
         scale_colour_manual(values = my_palette) +
         scale_fill_manual(values = my_palette, guide = "none") +
-        labs(x = "Date", y = paste(key, "departure delay [min]"),
-            colour = "Airport") +
+        labs(x = "Date", y = paste(key, "departure delay (min)"),
+             colour = "Airport") +
         guides(colour = guide_legend(override.aes = list(fill = NA)))
 }
 
@@ -87,10 +87,10 @@ flights |>
     summarize(avg = mean(speed), sd = sd(speed)) |>
     ggplot(aes(x = date, y = avg)) +
         geom_ribbon(aes(ymin = avg - sd, ymax = avg + sd),
-                    fill = "#83c54a", alpha = 0.5,
+                    fill = "#627bb4", alpha = 0.5,
                     colour = "transparent") +
-        geom_line(colour = "#394a41", lwd = 0.8) +
-        labs(x = "Date", y = "Average speed during the day [km/h]")
+        geom_line(colour = "#4a417b", lwd = 0.8) +
+        labs(x = "Date", y = "Average speed during the day (km/h)")
 
 flights |>
     count(date, carrier) |>

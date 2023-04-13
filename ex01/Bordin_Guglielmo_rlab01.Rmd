@@ -108,7 +108,7 @@ employees |>
     ggplot(aes(x = month, y = part_time, colour = company)) +
         geom_line(lwd = 0.8) +
         scale_colour_manual(values = my_palette, labels = full_names) +
-        labs(x = "Year", y = "Part-time employees [%]", colour = "Company")
+        labs(x = "Year", y = "Part-time employees (%)", colour = "Company")
 ```
 
 ## COVID-19 Effect
@@ -257,7 +257,7 @@ plot_delays <- function(key) {
         geom_smooth(aes(fill = origin), lwd = 0.8) +
         scale_colour_manual(values = my_palette) +
         scale_fill_manual(values = my_palette, guide = "none") +
-        labs(x = "Date", y = paste(key, "departure delay [min]"),
+        labs(x = "Date", y = paste(key, "departure delay (min)"),
             colour = "Airport") +
         guides(colour = guide_legend(override.aes = list(fill = NA)))
 }
@@ -283,3 +283,79 @@ plot_delays("Minimum")
 Nothing too significant here too.
 
 ## Plane Speed
+Here we’ll estimate the average speed of planes taking flight in a given
+day. To do it, we exploit the `distance` and `air_time` variables in the 
+database, and simply divide the first by the second – after converting to
+kilometers per hour, of course. For completeness, we add a ribbon of 2 
+standard deviations width around the mean.
+
+```{r}
+flights |>
+    drop_na(air_time) |>
+    # distances are in miles, air_time is in minutes
+    mutate(speed = distance * 1.60934 * 60 / air_time) |>
+    group_by(date) |>
+    summarize(avg = mean(speed), sd = sd(speed)) |>
+    ggplot(aes(x = date, y = avg)) +
+        geom_ribbon(aes(ymin = avg - sd, ymax = avg + sd),
+                    fill = "#627bb4", alpha = 0.5,
+                    colour = "transparent") +
+        geom_line(colour = "#4a417b", lwd = 0.8) +
+        labs(x = "Date", y = "Average speed during the day (km/h)")
+```
+
+## Company Comparison
+Lastly, we’ll look at the difference between the various airline companies
+(the `carrier` column in the dataset). For example, we can list the
+companies offering the two most flights per day…
+
+```{r}
+flights |>
+    count(date, carrier) |>
+    slice_max(n = 2, by = date, order_by = n) |>
+    head(10) |>
+    kbl()
+```
+
+… and per week.
+
+```{r}
+flights |>
+    count(week = week(date), carrier) |>
+    slice_max(n = 2, by = week, order_by = n) |>
+    head(10) |>
+    kbl()
+```
+
+Also, we can get the airline company offering the *least* flights per
+month.
+
+```{r}
+flights |>
+    count(month, carrier) |>
+    slice_min(by = month, order_by = n) |>
+    mutate(month = month.abb[month]) |>
+    kbl()
+```
+
+As a last example, we can show which airline company offered the longest
+distance flight in each month.
+
+```{r}
+flights |>
+    group_by(month) |>
+    summarize(carrier = carrier[which.max(distance)],
+              max_dist = max(distance)) |>
+    mutate(month = month.abb[month]) |>
+    kbl()
+```
+
+It turns out that this is a recurring flight between the JFK airport in New
+York and the Honolulu airport in Hawaii.
+
+```{r}
+flights |>
+    dplyr::filter(distance == max(distance)) |>
+    distinct(origin, dest) |>
+    kbl()
+```
