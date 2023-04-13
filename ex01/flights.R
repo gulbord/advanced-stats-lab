@@ -5,7 +5,7 @@ font <- "Lato"
 theme_set(theme_minimal(base_size = 14, base_family = font))
 my_palette <- rcartocolor::carto_pal(10, "Safe")[1:3]
 
-flights$date <- as_date(flights$time_hour)
+flights$date <- as_date(flights$time_hour, tz = "EST")
 
 flights |>
     count(date, origin) |>
@@ -77,3 +77,34 @@ plot_delays <- function(key) {
 plot_delays("Average")
 plot_delays("Maximum")
 plot_delays("Minimum")
+
+# average speed
+flights |>
+    drop_na(air_time) |>
+    # distances are in miles, air_time is in minutes
+    mutate(speed = distance * 1.60934 * 60 / air_time) |>
+    group_by(date) |>
+    summarize(avg = mean(speed), sd = sd(speed)) |>
+    ggplot(aes(x = date, y = avg)) +
+        geom_ribbon(aes(ymin = avg - sd, ymax = avg + sd),
+                    fill = "#83c54a", alpha = 0.5,
+                    colour = "transparent") +
+        geom_line(colour = "#394a41", lwd = 0.8) +
+        labs(x = "Date", y = "Average speed during the day [km/h]")
+
+flights |>
+    count(date, carrier) |>
+    slice_max(n = 2, by = date, order_by = n)
+
+flights |>
+    count(week = week(date), carrier) |>
+    slice_max(n = 2, by = week, order_by = n)
+
+flights |>
+    count(month, carrier) |>
+    slice_min(by = month, order_by = n)
+
+flights |>
+    group_by(month) |>
+    summarize(carrier = carrier[which.max(distance)],
+              max_dist = max(distance))
