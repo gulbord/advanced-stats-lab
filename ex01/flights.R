@@ -1,3 +1,4 @@
+library(kableExtra)
 library(tidyverse)
 library(nycflights13)
 
