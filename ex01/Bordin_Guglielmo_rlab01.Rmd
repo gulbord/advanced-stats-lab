@@ -146,8 +146,7 @@ The data we want to analyse here comes from the `nycflights13` package.
 
 ```{r}
 library(nycflights13)
-library(rcartocolor)
-my_palette <- carto_pal(10, "Safe")[1:3]
+my_palette <- rcartocolor::carto_pal(10, "Safe")[1:3]
 ```
 
 First, let’s have a look at the four tibbles in the dataset.
