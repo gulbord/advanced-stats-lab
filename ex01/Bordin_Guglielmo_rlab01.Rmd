@@ -163,7 +163,7 @@ Now we’ll plot the total number of flights departing from each of the
 three NYC airports (JFK, LGA and EWR) as a function of time.
 
 ```{r}
-flights$date <- as_date(flights$time_hour)
+flights$date <- as_date(flights$time_hour, tz = "EST")
 
 flights |>
     count(date, origin) |>
