@@ -1,0 +1,146 @@
+---
+title: R Laboratory – Exercise 2
+author: Guglielmo Bordin
+date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
+header-includes:
+    - \usepackage{mathtools}
+output:
+    rmdformats::readthedown:
+        fig_width: 6.5
+        fig_height: 4
+        thumbnails: false
+        lightbox: true
+        gallery: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(dev = "svg")
+```
+
+# Discrete Random Variable
+In this exercise, we’ll examine a probability distribution function of
+a discrete random variable $k$ given by
+$$
+    f(k) =
+    \begin{cases}
+        k / 15 & \text{when } k = 1, 2, 3, 4, 5, \\
+        0      & \text{otherwise}.
+    \end{cases}
+$$
+
+
+## PDF and CDF
+Now we’ll write the R functions for the probability density $f$ and the
+cumulative distribution $F$, following the R naming convention. For the
+CDF, we have to sum the probability up to a given threshold:
+$$
+    F(k) = \sum_{n = 1}^{k} \frac{n}{15} = \frac{k(k + 1)}{30}.  
+$$
+
+```{r}
+# probability density function
+dunif5 <- function(x) {
+    ifelse(x %in% 1:5, x / 15, 0)
+}
+
+# cumulative distribution function
+punif5 <- function(x) {
+    ifelse(x > 4, 1, ifelse(x < 1, 0, x * (x + 1) / 30))
+}
+```
+
+Then, we can view them in a bar plot.
+```{r}
+# import ggplot and choose font and palette
+library(ggplot2)
+theme_set(theme_minimal(base_size = 14, base_family = "Lato"))
+my_pal <- c("#83accd", "#20415a", "#dec552", "#7b6220")
+```
+
+```{r}
+x <- 0:6
+# plot the pdf
+ggplot() +
+    geom_col(aes(x = x, y = dunif5(x)), fill = my_pal[1]) +
+    scale_x_continuous(breaks = x) +
+    labs(x = "x", y = "f(x)")
+```
+
+```{r}
+# plot the cdf
+ggplot() +
+    geom_col(aes(x = x, y = punif5(x)), fill = my_pal[1]) +
+    scale_x_continuous(breaks = x) +
+    labs(x = "x", y = "F(x)")
+```
+
+## Expected Values
+Having the probability density, we can evaluate the first and second
+central moments of the distribution, i.e. the mean and variance:
+$$
+\begin{aligned}
+      \mathrm{E}[k] &= \sum_{k = 1}^{5} k f(k) = \frac{11}{3}, \\
+    \mathrm{Var}[k] &= \mathrm{E}[(k - \mu)^2]
+                     = \sum_{k = 1}^{5} (k - \mu)^2 f(k) = \frac{14}{9}.
+\end{aligned}
+$$
+To call `dunif5` on a sequence `1:5`, we can use the R function `sapply`.
+
+```{r}
+x <- 1:5
+fx <- sapply(x, dunif5)
+
+cat("Mean =", mu <- sum(x * fx))
+cat("Variance =", sum((x - mu)^2 * fx))
+```
+
+Let’s compute another expected value, $\mathrm{E}[k(6 - k)]$.
+```{r}
+cat("E[k(6 - k)] =", sum(x * (6 - x) * fx))
+```
+
+## Sampling From the Distribution
+Now we implement a function that allows to sample random numbers from 
+the probability distribution $f(k)$, following the R naming convention
+with the `r` prefix. We use the inverse transform method, sampling
+first from a uniform distribution (with `runif`), and then choosing the
+minimum $k$ such that $F(k)$ is greater than the sampled number.
+```{r}
+# n = number of samples
+runif5 <- function(n) {
+    x <- 1:5
+    sapply(runif(n), function(r) x[which(sapply(x, punif5) > r)[1]])
+}
+```
+
+Using the newly implemented function, we sample $10^5$ random numbers and
+plot them in a normalized histogram superimposed to the PDF.
+```{r}
+sample <- runif5(1e5)
+x <- 1:5
+fx <- sapply(x, dunif5)
+ggplot() +
+    geom_histogram(aes(x = sample,
+                       y = after_stat(count / sum(count)),
+                       fill = "hist"),
+                   binwidth = 1) +
+    geom_point(aes(x = x, y = fx, colour = "pdf"), size = 3) +
+    geom_line(aes(x = x, y = fx, colour = "pdf"), linewidth = 0.8) +
+    scale_fill_manual(values = my_pal[1], labels = "Simulated data") +
+    scale_colour_manual(values = my_pal[2], labels = "PDF") +
+    labs(x = "x", y = "f(x)", colour = NULL, fill = NULL)
+```
+
+# Continuous Random Variable
+Now we’ll analyse the continuous triangular distribution in an interval
+$[a, b]$, which is
+$$
+    f(X) =
+    \begin{cases}
+        \dfrac{2(x - a)}{(b - a)(c - a)} & a \leqslant x < c, \\[2ex]
+        \dfrac{2(b - x)}{(b - a)(b - c)} & c \leqslant x
+                                             \leqslant b, \\[2ex]
+                                       0 &\text{otherwise}, \\
+    \end{cases}
+$$
+where $c \in [a, b]$.
