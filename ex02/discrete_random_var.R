@@ -1,7 +1,13 @@
 library(ggplot2)
-font <- "Roboto Condensed"
-theme_set(theme_minimal(base_size = 14, base_family = font))
-my_pal <- unname(palette.colors(4, "Okabe-Ito"))
+theme_set(theme_minimal(base_size = 14, base_family = "Lato"))
+# Nidoqueen
+# my_pal <- c("#5ab4cd", "#314a4a", "#bdac5a", "#735a29")
+# Victreebel
+# my_pal <- c("#8bc57b", "#106239", "#debd52", "#625229")
+# Tangela
+# my_pal <- c("#5aa4cd", "#204152", "#de4a6a", "#732929")
+# Horsea
+my_pal <- c("#a4c5ee", "#395262", "#dec54a", "#9c834a")
 
 # probability density function
 # p(k) = k / 15 with k = 1, ..., 5
@@ -17,14 +23,14 @@ punif5 <- function(x) {
 # plotting the pdf
 x <- 0:6
 ggplot() +
-    geom_col(aes(x = x, y = dunif5(x)), fill = my_pal[2]) +
+    geom_col(aes(x = x, y = dunif5(x)), fill = my_pal[1]) +
     scale_x_continuous(breaks = x) +
     labs(x = "x", y = "f(x)", title = "Probability density function")
 
 # plotting the cdf
 x <- 0:8
 ggplot() +
-    geom_col(aes(x = x, y = punif5(x)), fill = my_pal[2]) +
+    geom_col(aes(x = x, y = punif5(x)), fill = my_pal[1]) +
     scale_x_continuous(breaks = x) +
     labs(x = "x", y = "F(x)", title = "Cumulative distribution function")
 
@@ -58,6 +64,6 @@ ggplot() +
                   y = sapply(x, dunif5),
                   colour = "pdf"),
               linewidth = 1) +
-    scale_fill_manual(values = my_pal[2], labels = "Simulated data") +
-    scale_colour_manual(values = my_pal[1], labels = "PDF") +
+    scale_fill_manual(values = my_pal[1], labels = "Simulated data") +
+    scale_colour_manual(values = my_pal[2], labels = "PDF") +
     labs(x = "x", y = "f(x)", colour = NULL, fill = NULL)
