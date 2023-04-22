@@ -17,7 +17,7 @@ output:
 knitr::opts_chunk$set(dev = "svg")
 ```
 
-# Discrete Random Variable
+# Discrete random variable
 In this exercise, we’ll examine a probability distribution function of
 a discrete random variable $k$ given by
 $$
@@ -53,7 +53,7 @@ Then, we can view them in a bar plot.
 ```{r}
 # import ggplot and choose font and palette
 library(ggplot2)
-theme_set(theme_minimal(base_size = 14, base_family = "Lato"))
+theme_set(theme_light(base_size = 14, base_family = "Lato"))
 my_pal <- c("#83accd", "#20415a", "#dec552", "#7b6220")
 ```
 
@@ -74,7 +74,7 @@ ggplot() +
     labs(x = "x", y = "F(x)")
 ```
 
-## Expected Values
+## Expected values
 Having the probability density, we can evaluate the first and second
 central moments of the distribution, i.e. the mean and variance:
 $$
@@ -84,12 +84,10 @@ $$
                      = \sum_{k = 1}^{5} (k - \mu)^2 f(k) = \frac{14}{9}.
 \end{aligned}
 $$
-To call `dunif5` on a sequence `1:5`, we can use the R function `sapply`.
 
 ```{r}
 x <- 1:5
-fx <- sapply(x, dunif5)
-
+fx <- dunif5(x)
 cat("Mean =", mu <- sum(x * fx))
 cat("Variance =", sum((x - mu)^2 * fx))
 ```
@@ -99,7 +97,7 @@ Let’s compute another expected value, $\mathrm{E}[k(6 - k)]$.
 cat("E[k(6 - k)] =", sum(x * (6 - x) * fx))
 ```
 
-## Sampling From the Distribution
+## Sampling from the distribution
 Now we implement a function that allows to sample random numbers from 
 the probability distribution $f(k)$, following the R naming convention
 with the `r` prefix. We use the inverse transform method, sampling
@@ -109,7 +107,7 @@ minimum $k$ such that $F(k)$ is greater than the sampled number.
 # n = number of samples
 runif5 <- function(n) {
     x <- 1:5
-    sapply(runif(n), function(r) x[which(sapply(x, punif5) > r)[1]])
+    sapply(runif(n), function(r) x[which(punif5(x) > r)[1]])
 }
 ```
 
@@ -118,7 +116,7 @@ plot them in a normalized histogram superimposed to the PDF.
 ```{r}
 sample <- runif5(1e5)
 x <- 1:5
-fx <- sapply(x, dunif5)
+fx <- dunif5(x)
 ggplot() +
     geom_histogram(aes(x = sample,
                        y = after_stat(count / sum(count)),
@@ -131,7 +129,7 @@ ggplot() +
     labs(x = "x", y = "f(x)", colour = NULL, fill = NULL)
 ```
 
-# Continuous Random Variable
+# Continuous random variable
 Now we’ll analyse the continuous triangular distribution in an interval
 $[a, b]$, which is
 $$
@@ -144,3 +142,28 @@ $$
     \end{cases}
 $$
 where $c \in [a, b]$.
+
+Let’s define the R function for the PDF…
+```{r}
+dtriang <- function(x, a, c, b) {
+    ifelse(a <= x & x < c,
+           2 * (x - a) / ((b - a) * (c - a)),
+           ifelse(c <= x & x <= b,
+                  2 * (b - x) / ((b - a) * (b - c)),
+                  0))
+}
+```
+
+… and plot it, choosing $a = 1$, $b = 4$ and $c = 2$.
+```{r}
+x <- seq(0, 5, by = 0.01)
+fx <- dtriang(x, 1, 2, 4)
+
+ggplot() +
+    geom_line(aes(x = x, y = fx), colour = my_pal[3], linewidth = 0.8) +
+    labs(x = "x", y = "f(x)")
+```
+
+## Sampling from the distribution
+Once again, let’s write an algorithm to generate random numbers from this
+PDF. We start from the CDF,
