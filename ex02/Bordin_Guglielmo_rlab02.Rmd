@@ -2,8 +2,6 @@
 title: R Laboratory – Exercise 2
 author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
-header-includes:
-    - \usepackage{mathtools}
 output:
     rmdformats::readthedown:
         fig_width: 6.5
@@ -18,8 +16,8 @@ knitr::opts_chunk$set(dev = "svg")
 ```
 
 # Discrete random variable
-In this exercise, we’ll examine a probability distribution function of
-a discrete random variable $k$ given by
+In this exercise, we’ll examine a probability distribution function of a
+discrete random variable $k$ given by
 $$
     f(k) =
     \begin{cases}
@@ -99,11 +97,11 @@ cat("E[k(6 - k)] =", sum(x * (6 - x) * fx))
 ```
 
 ## Sampling from the distribution
-Now we implement a function that allows to sample random numbers from 
-the probability distribution $f(k)$, following the R naming convention
-with the `r` prefix. We use the inverse transform method, sampling
-first from a uniform distribution (with `runif`), and then choosing the
-minimum $k$ such that $F(k)$ is greater than the sampled number.
+Now we implement a function that allows to sample random numbers from the
+probability distribution $f(k)$, following the R naming convention with the
+`r` prefix. We use the inverse transform method, sampling first from a
+uniform distribution (with `runif`), and then choosing the minimum $k$ such
+that $F(k)$ is greater than the sampled number.
 ```{r}
 # n = number of samples
 runif5 <- function(n) {
@@ -260,10 +258,19 @@ ggplot() +
     labs(x = "Waiting time (min)", y = "Number of people")
 ```
 
-The probability for a person to wait less than 12 minutes is given by 
-the CDF at $x = 12$.
+The probability for a person to wait less than 12 minutes is given by the
+CDF at $x = 12$,
 ```{r}
-cat("P(t < 12) =", pexp(12, 1 / 30))
+cat("P(t <= 12) =", pexp(12, 1 / 30))
+```
+while for the probability to wait more than one hour,
+```{r}
+cat("P(t > 60) =", 1 - pexp(60, 1 / 30))
+```
+We can check if the simulated data returns something similar.
+```{r}
+cat("Simulated P(t <= 12) =", sum(sample <= 12) / length(sample))
+cat("Simulated P(t > 60) =", sum(sample > 60) / length(sample))
 ```
 
 Now, we evaluate the average waiting time from the simulated data.
@@ -271,8 +278,114 @@ Now, we evaluate the average waiting time from the simulated data.
 cat("Sample average =", mean(sample))
 ```
 And we notice that it’s well in line with the expected value from the 
-distribution, $1 / \lambda = 30$. We can get the same result by
-integrating `x * dexp(x, 1 / 30)` with R.
+distribution, $1 / \lambda = 30$. We can get the same result by integrating
+`x * dexp(x, 1 / 30)` with R.
 ```{r}
 integrate(function(x) x * dexp(x, 1 / 30), 0, Inf)
+```
+
+# Multiple choice exams
+The final exam of a course has the format of a multiple choice written
+test, with five alternatives for each question. A student either knows the
+answer, or selects it randomly among the five choices.
+
+If we assume that the probability that a student knows the answer is $p =
+0.7$, what is the probability that a student knowingly marks a correct
+answer as such? We can use Bayes’ Theorem to answer the question.
+
+In our case, the “data” $D$ is “the student gets the correct answer”, while
+the “hypothesis” $H$ is “the student *knew* the correct answer”. We have 
+then
+$$
+    \newcommand{\given}{\,\vert\,}
+    P(D \given H) = 1, \quad P(D \given \bar{H}) = 0.2, \quad P(H) = 0.7,
+$$
+and applying Bayes’ Theorem,
+$$
+    P(H \given D) = \frac{P(D \given H) P(H)}{P(D \given H) P(H) 
+        + P(D \given \bar{H}) P(\bar{H})}
+$$
+
+```{r}
+cat(1 * 0.7 / (1 * 0.7 + 0.2 * 0.3))
+```
+
+Let’s perform a simulation to check the answer.
+```{r}
+n <- 1e5
+correct <- sample(1:5, n, replace = TRUE)
+student <- ifelse(runif(n) < 0.7, "knew",
+                  ifelse(sample(1:5, 1) == correct, "correct", "wrong"))
+
+cat(sum(student == "knew") / (n - sum(student == "wrong")))
+```
+
+# Waiting at the station
+Starting from 5:00 in the morning, every half an hour a train departs from
+the Milano Centrale station directed to Roma Termini. We assume there is
+always an available seat on a train leaving from Milano.
+
+Let’s assume that a person arrives at a random time between 10:45 and
+11:45. The distribution of the waiting time is uniform:
+```{r}
+n <- 1e5
+wait_time <- (15 + runif(n, 0, 60)) %% 30
+
+ggplot() +
+    geom_histogram(
+        aes(x = wait_time),
+        binwidth = 1,
+        boundary = 0,
+        fill = my_pal[3]
+    ) +
+    scale_y_continuous(breaks = scales::pretty_breaks()) +
+    labs(x = "Waiting time (min)", y = "Frequency")
+```
+
+What is the probability to wait at most 10 minutes? From the distribution,
+we expect
+$$
+    P(t \leqslant 10) = \frac{10}{30} = \frac{1}{3}.
+$$
+From the data we get:
+```{r}
+cat("Simulated P(t <= 10) =", sum(wait_time <= 10) / n)
+```
+
+And to wait at least 15 minutes?
+$$
+    P(t \geqslant 15) = \frac{15}{30} = \frac{1}{2}.
+$$
+```{r}
+cat("Simulated P(t >= 15) =", sum(wait_time >= 15) / n)
+```
+
+The average time spent waiting should be 15 minutes.
+```{r}
+cat("Simulated E[t] =", mean(wait_time))
+```
+
+# Stock investment
+The annual return rate for a certain stock on the market is a normal
+variable with a 10% mean and a 12% standard deviation. Mr X decides to buy
+200 shares of the stock at a price of 85€ per share. What is the
+probability that after a year his net profit from the investment is at
+least 800€? (Supposing there are no transaction costs and annual dividends
+for the stock.)
+
+We can first simulate some samples.
+```{r}
+nsamples <- 1e5
+nshares <- 200
+price <- 85
+
+sample <- nshares * price * rnorm(nsamples, 0.1, 0.12)
+cat("Simulated P(x >= 800) =", sum(sample >= 800) / nsamples)
+```
+This corresponds to the results we get using the CDF `pnorm`.
+```{r}
+cat(
+    "P(x >= 800) =",
+    1 - pnorm(800, 0.1 * price * nshares, 0.12 * price * nshares)
+)
 ```
