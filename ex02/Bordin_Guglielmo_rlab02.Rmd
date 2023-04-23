@@ -88,6 +88,7 @@ $$
 ```{r}
 x <- 1:5
 fx <- dunif5(x)
+
 cat("Mean =", mu <- sum(x * fx))
 cat("Variance =", sum((x - mu)^2 * fx))
 ```
@@ -117,11 +118,12 @@ plot them in a normalized histogram superimposed to the PDF.
 sample <- runif5(1e5)
 x <- 1:5
 fx <- dunif5(x)
+
 ggplot() +
-    geom_histogram(aes(x = sample,
-                       y = after_stat(count / sum(count)),
-                       fill = "hist"),
-                   binwidth = 1) +
+    geom_histogram(
+        aes(x = sample, y = after_stat(density), fill = "hist"),
+        binwidth = 1
+    ) +
     geom_point(aes(x = x, y = fx, colour = "pdf"), size = 3) +
     geom_line(aes(x = x, y = fx, colour = "pdf"), linewidth = 0.8) +
     scale_fill_manual(values = my_pal[1], labels = "Simulated data") +
@@ -143,9 +145,10 @@ $$
 $$
 where $c \in [a, b]$.
 
-Let’s define the R function for the PDF…
+Let’s define the R function for the PDF, giving some sensible defaults
+for the three parameters:
 ```{r}
-dtriang <- function(x, a, c, b) {
+dtriang <- function(x, a = 0, c = 0.5, b = 1) {
     ifelse(a <= x & x < c,
            2 * (x - a) / ((b - a) * (c - a)),
            ifelse(c <= x & x <= b,
@@ -166,4 +169,110 @@ ggplot() +
 
 ## Sampling from the distribution
 Once again, let’s write an algorithm to generate random numbers from this
-PDF. We start from the CDF,
+PDF. We start from the CDF: in the interval $[a, c)$ we get
+$$
+    F_1(x) = \frac{2}{(b - a)(c - a)} \int_a^x (y - a) \, dy 
+           = \frac{(x - a)^2}{(b - a)(c - a)},
+$$
+while in $[c, b]$
+$$
+    F_2(x) = 1 - \frac{2}{(b - a)(b - c)} \int_x^b (b - y) \, dy
+           = 1 - \frac{(b - x)^2}{(b - a)(b - c)}
+$$
+```{r}
+ptriang <- function(x, a = 0, c = 0.5, b = 1) {
+    ifelse(a <= x & x < c,
+           (x - a)^2 / ((b - a) * (c - a)),
+           ifelse(c <= x & x < b,
+                  1 - (b - x)^2 / ((b - a) * (b - c)),
+                  ifelse(x >= b, 1, 0)))
+}
+
+ggplot() +
+    geom_line(
+        aes(x = x, y = ptriang(x, 1, 2, 4)),
+        colour = my_pal[3],
+        linewidth = 0.8
+    ) +
+    labs(x = "x", y = "F(x)")
+```
+
+Now let’s invert it, defining the quantile function `qtriang`. With some 
+manipulations we can find
+$$
+\begin{aligned}
+    F^{-1}_1(p) &= a + \sqrt{p(b - a)(c - a)}, \\
+    F^{-1}_2(p) &= b - \sqrt{(1 - p)(b - a)(b - c)}.
+\end{aligned}
+$$
+
+```{r}
+qtriang <- function(p, a = 0, c = 0.5, b = 1) {
+    pc <- (c - a) / (b - a)
+    ifelse(p < pc,
+           a + sqrt(p * (b - a) * (c - a)),
+           b - sqrt((1 - p) * (b - a) * (b - c)))
+}
+
+rtriang <- function(n, a = 0, c = 0.5, b = 1) {
+    qtriang(runif(n), a, c, b)
+}
+```
+
+Let’s plot some generated numbers in a histogram to check that everything
+works.
+
+```{r}
+x <- seq(0, 5, by = 0.01)
+fx <- dtriang(x, 1, 2, 4)
+sample <- rtriang(1e4, 1, 2, 4)
+
+ggplot() +
+    geom_histogram(
+        aes(x = sample, y = after_stat(density), fill = "hist"),
+        bins = 30
+    ) +
+    geom_line(aes(x = x, y = fx, colour = "pdf"), linewidth = 0.8) +
+    scale_fill_manual(values = my_pal[3], labels = "Simulated data") +
+    scale_colour_manual(values = my_pal[4], labels = "PDF") +
+    labs(x = "x", y = "f(x)", colour = NULL, fill = NULL)
+```
+
+# Waiting at the doctor’s
+The waiting time, in minutes, at the doctor’s is about 30 minutes, and the 
+distribution follows an exponential PDF with rate $\lambda = 1 / 30$.
+
+The exponential PDF is already provided in R, so we can directly call the
+function `rexp` to simulate the waiting time for 60 people, and plot the 
+relative histogram.
+
+```{r}
+sample <- rexp(60, 1 / 30)
+
+ggplot() +
+    geom_histogram(
+        aes(x = sample),
+        boundary = 0,
+        fill = my_pal[1],
+        binwidth = 10
+    ) +
+    scale_y_continuous(breaks = scales::pretty_breaks()) +
+    labs(x = "Waiting time (min)", y = "Number of people")
+```
+
+The probability for a person to wait less than 12 minutes is given by 
+the CDF at $x = 12$.
+```{r}
+cat("P(t < 12) =", pexp(12, 1 / 30))
+```
+
+Now, we evaluate the average waiting time from the simulated data.
+```{r}
+cat("Sample average =", mean(sample))
+```
+And we notice that it’s well in line with the expected value from the 
+distribution, $1 / \lambda = 30$. We can get the same result by
+integrating `x * dexp(x, 1 / 30)` with R.
+```{r}
+integrate(function(x) x * dexp(x, 1 / 30), 0, Inf)
+```
