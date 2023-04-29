@@ -12,10 +12,10 @@ stepf <- function(x) {
                  ifelse(x <= 0.5, 0.5 - x, 0)))
 }
 
-post_step_star <- function(x) {
+post_step_num <- function(x) {
     stepf(x) * dbinom(y, n, x)
 }
 
-post_step <- post_step_star(p) / integrate(post_step_star, 0, 1)$value
+post_step <- post_step_num(p) / integrate(post_step_num, 0, 1)$value
 post_unif <- dbeta(p, 1 + y, 1 + n - y)
 post_jeff <- dbeta(p, 0.5 + y, 0.5 + n - y)

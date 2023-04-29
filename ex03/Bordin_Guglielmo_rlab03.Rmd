@@ -1,0 +1,16 @@
+---
+title: R Laboratory – Exercise 3
+author: Guglielmo Bordin
+date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
+output:
+    rmdformats::readthedown:
+        fig_width: 6.5
+        fig_height: 4
+        thumbnails: false
+        lightbox: true
+        gallery: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(dev = "svg")
+```
