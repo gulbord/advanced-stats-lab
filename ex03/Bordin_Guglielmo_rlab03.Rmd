@@ -4,13 +4,164 @@ author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
     rmdformats::readthedown:
-        fig_width: 6.5
-        fig_height: 4
+        fig_width: 8
+        fig_height: 5
         thumbnails: false
         lightbox: true
         gallery: true
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(dev = "svg")
+knitr::opts_chunk$set(dev = "svg", message = FALSE)
+```
+
+# Comparing priors for binomial inference
+In this problem we’ll study the binomial inference for a study that reports
+$y = 7$ successes in $n = 20$ independent trials.
+```{r}
+y <- 7  # number of successes
+n <- 20 # number of trials
+```
+We’ll assume three different priors:
+
+* a uniform distribution
+* a Jeffrey’s prior
+* a step function defined as
+$$
+    g(\pi) =
+    \begin{cases}
+        \pi       &       \pi \leqslant 0.2 \\
+        0.2       & 0.2 < \pi \leqslant 0.3 \\
+        0.5 - \pi & 0.3 < \pi \leqslant 0.5 \\
+        0         & 0.5 < \pi
+    \end{cases}
+$$
+
+Let’s implement the step function first…
+```{r}
+stepf <- function(x) {
+   ifelse(x <= 0.2, x,
+          ifelse(x <= 0.3, 0.2,
+                 ifelse(x <= 0.5, 0.5 - x, 0)))
+}
+```
+… and compute the three posterior distributions. For the uniform and
+Jeffrey's prior, this is straightforward since they are just beta
+distributions, which are the conjugate prior for the binomial likelihood.
+Thus, the posteriors are beta distributions with different $\alpha$ and
+$\beta$ values depending on the exponents resulting from the product of the
+likelihood and the prior.
+```{r}
+alph_unif <- 1 + y
+beta_unif <- 1 + n - y
+alph_jeff <- 0.5 + y
+beta_jeff <- 0.5 + n - y
+
+post_unif <- function(p) dbeta(p, alph_unif, beta_unif)
+post_jeff <- function(p) dbeta(p, alph_jeff, beta_jeff)
+```
+For the case of the step function, we need to multiply the likelihood and
+the step prior, and then perform numerical integration to determine the
+normalization constant.
+```{r}
+post_step <- function(p) {
+    post_step_num <- function(x) stepf(x) * dbinom(y, n, x)
+    post_step_num(p) / integrate(post_step_num, 0, 1)$value
+}
+```
+Let’s plot the three posteriors on top of each other to compare them.
+```{r}
+library(tidyverse)
+theme_set(theme_light(base_size = 14, base_family = "Lato"))
+my_pal <- unname(palette.colors(4, "Okabe-Ito"))
+
+# probability vector
+dp <- 1 / 2000
+p <- seq(0, 1, by = dp)
+
+# convert data to long format for ggplot
+post_df <- tibble(p, post_unif(p), post_jeff(p), post_step(p)) |>
+    set_names("p", "unif", "jeff", "step") |>
+    pivot_longer(2:4, names_to = "dist", values_to = "fp")
+
+prior_names <- c(unif = "Uniform", jeff = "Jeffrey’s", step = "Step")
+prior_cols <- my_pal[1:3] |> set_names("unif", "jeff", "step")
+
+ggplot(post_df, aes(x = p, y = fp, colour = dist)) +
+    geom_line(linewidth = 0.8) +
+    scale_colour_manual(values = prior_cols, labels = prior_names) +
+    labs(
+        x = "Binomial parameter",
+        y = "Posterior distribution",
+        colour = "Prior"
+    ) +
+    coord_cartesian(expand = FALSE, ylim = c(0, 6))
+```
+
+To further the comparison, we can compute the first two moments of each 
+posterior distribution.
+```{r}
+means <- map_dbl(
+    c(post_unif, post_jeff, post_step),
+    function(f) integrate(function(p) p * f(p), 0, 1)$value
+)
+
+variances <- map_dbl(
+    c(post_unif, post_jeff, post_step),
+    function(f) integrate(function(p) p^2 * f(p), 0, 1)$value
+) - means^2
+```
+
+Now we’ll also compute a 95% credibility interval on each distribution.
+For the uniform and Jeffrey’s it’s easy, we can use the built-in quantile
+function `qbeta`. For the step function we have to find the probability
+thresholds numerically.
+```{r}
+thresh <- c(0.025, 0.975)
+cred_unif <- qbeta(thresh, alph_unif, beta_unif)
+cred_jeff <- qbeta(thresh, alph_jeff, beta_jeff)
+cred_step <- map_dbl(
+    thresh,
+    \(t) p[which(near(cumsum(post_step(p)) * dp, t, tol = dp / 2))]
+)
+```
+
+Let’s put the results in a summary table, and draw the limits on the
+plot of the posterior distributions.
+```{r}
+library(kableExtra)
+
+tibble(
+    prior_names, means, variances,
+    creds = list(cred_unif, cred_jeff, cred_step)
+) |>
+    mutate(creds = format(creds, digits = 3)) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Mean", "Variance", "95% cred. int.") |>
+    kbl() |>
+    kable_styling(full_width = FALSE)
+```
+```{r}
+creds <- rbind(unif = cred_unif, jeff = cred_jeff, step = cred_step) |>
+    as_tibble(rownames = "dist", .name_repair = "minimal") |>
+    set_names("dist", "thresh1", "thresh2")
+
+ggplot(post_df, aes(x = p, y = fp, colour = dist)) +
+    geom_line(linewidth = 0.8) +
+    geom_ribbon(
+        aes(ymin = 0, ymax = fp, fill = dist),
+        data = post_df |>
+            group_by(dist) |>
+            filter(p > creds$thresh1[creds$dist == unique(dist)] &
+                   p < creds$thresh2[creds$dist == unique(dist)]),
+        alpha = 0.5,
+        show.legend = FALSE) +
+    scale_colour_manual(values = prior_cols, labels = prior_names) +
+    scale_fill_manual(values = prior_cols) +
+    labs(
+        x = "Binomial parameter",
+        y = "Posterior distribution",
+        colour = "Prior"
+    ) +
+    coord_cartesian(expand = FALSE, ylim = c(0, 6))
 ```
