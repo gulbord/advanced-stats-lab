@@ -142,7 +142,7 @@ summary_table <- function(prior_names, means, variances, creds) {
         dplyr::mutate(creds = format(creds, digits = 3)) |>
         dplyr::mutate_if(is.numeric, format, digits = 3) |>
         rlang::set_names("Prior", "Mean", "Variance", "95% cred. int.") |>
-        kableExtra::kbl() |>
+        kableExtra::kbl(caption = "Posterior parameters") |>
         kableExtra::kable_styling(full_width = FALSE)
 }
 
@@ -306,7 +306,7 @@ tibble(
         "Prior", "Mean", "Variance",
         "95% cred. int.", "95% cred. int. (normal appr.)"
     ) |>
-    kableExtra::kbl() |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
     kableExtra::kable_styling(full_width = FALSE)
 ```
 ```{r}
@@ -363,12 +363,12 @@ tibble(
 # Coin flipping
 A coin is flipped 30 times with the following outcomes:
 ```
-    T, T, T, T, T, H, T, T, H, H,
-    T, T, H, H, H, T, H, T, H, T,
-    H, H, T, H, T, H, T, H, H, H
+T, T, T, T, T, H, T, T, H, H,
+T, T, H, H, H, T, H, T, H, T,
+H, H, T, H, T, H, T, H, H, H
 ```
 
-We’ll assume a flat prior and a $\operatorname{Beta}(10, 10)$ prior, and
+We’ll assume a uniform prior and a $\operatorname{Beta}(10, 10)$ prior, and
 plot the likelihood, prior and posterior distributions following the two
 assumptions.
 ```{r}
@@ -391,17 +391,17 @@ a <- 10
 b <- 10
 
 # priors
-prior_flat <- function(p) dunif(p, 0, 1)
+prior_unif <- function(p) dunif(p, 0, 1)
 prior_beta <- function(p) dbeta(p, a, b)
 
 # posterior parameters
-alph_flat <- 1 + h
-beta_flat <- 1 + n - h
+alph_unif <- 1 + h
+beta_unif <- 1 + n - h
 alph_beta <- a + h
 beta_beta <- b + n - h
 
 # posteriors
-post_flat <- function(p) dbeta(p, alph_flat, beta_flat)
+post_unif <- function(p) dbeta(p, alph_unif, beta_unif)
 post_beta <- function(p) dbeta(p, alph_beta, beta_beta)
 ```
 
@@ -413,20 +413,20 @@ dist_names <- c(lik = "Likelihood", pri = "Prior", pos = "Posterior")
 tibble(
     p = p,
     # duplicate the likelihood to help facet_grid later
-    flat_lik = lhood(p),
-    flat_pri = prior_flat(p),
-    flat_pos = post_flat(p),
+    unif_lik = lhood(p),
+    unif_pri = prior_unif(p),
+    unif_pos = post_unif(p),
     beta_lik = lhood(p),
     beta_pri = prior_beta(p),
     beta_pos = post_beta(p)
 ) |>
     pivot_longer(-1, names_to = "prior", values_to = "fp") |>
     # move lik/pri/pos indicator to `dist` column
-    # keep only flat/beta indicator in `prior` column
+    # keep only unif/beta indicator in `prior` column
     mutate(dist = str_sub(prior, -3), prior = str_sub(prior, 1, 4)) |>
     mutate(
         dist = fct_relevel(dist, "lik", "pri", "pos"),
-        prior = fct_relevel(prior, "flat", "beta")
+        prior = fct_relevel(prior, "unif", "beta")
     ) |>
     ggplot(aes(x = p, y = fp, colour = dist)) +
         geom_line(linewidth = 0.8) +
@@ -437,7 +437,80 @@ tibble(
         facet_grid(
             rows = vars(prior),
             labeller = as_labeller(
-                c(flat = "Flat prior", beta = "Beta(10, 10) prior")
+                c(unif = "Uniform prior", beta = "Beta prior")
             )
         )
+```
+
+Let’s evaluate the most probable value for the coin probability $\pi$,
+giving also estimates for the 95% credibility intervals.
+```{r}
+# most probable values for p
+modes <- p[map_int(c(post_unif, post_beta), \(f) which.max(f(p)))]
+# mean and variance
+means <- moment(c(post_unif, post_beta), 1)
+variances <- moment(c(post_unif, post_beta), 2) - means^2
+
+# credibility intervals
+creds <- list(
+    unif = qbeta(thresh, alph_unif, beta_unif),
+    beta = qbeta(thresh, alph_beta, beta_beta)
+)
+
+# summary table
+tibble(names = c("Uniform", "Beta"), modes, means, variances, creds) |>
+    mutate(creds = format(creds, digits = 3)) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Mode", "Mean", "Variance", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+Now, we try to repeat the same analysis in a sequential way. We’ll
+incrementally subset the `results` vector and perform the analysis on that
+portion of the data. The posterior obtained at each step will be used as
+the prior in the next.
+
+```{r}
+# form vectors to hold credibility intervals and modes
+modes <- numeric(n)
+creds <- replicate(n, numeric(2))
+# define first prior parameters (uniform --> alpha = beta = 1)
+a <- 1
+b <- 1
+
+for (i in seq_along(results)) {
+    # count heads
+    h <- sum(results[1:i] == "H")
+    # update alpha and beta
+    a <- a + h
+    b <- b + i - h
+    # compute posterior and parameters
+    post <- dbeta(p, a, b)
+    modes[i] <- p[which.max(post)]
+    # if h = 0 compute the one-sided interval
+    creds[, i] <- qbeta(if (h != 0) c(0.025, 0.975) else c(0, 0.95), a, b)
+}
+```
+
+Let’s plot the results.
+```{r}
+tibble(
+    iter = seq_along(results),
+    mode = modes,
+    crmin = creds[1, ],
+    crmax = creds[2, ]
+) |>
+    ggplot(aes(x = iter, y = mode)) +
+        geom_line(aes(colour = "line"), linewidth = 0.8) +
+        geom_ribbon(
+            aes(ymin = crmin, ymax = crmax, fill = "ribbon"),
+            alpha = 0.5
+        ) +
+        scale_colour_manual(values = "#4a417b", labels = "Mode") +
+        scale_fill_manual(values = "#627bb4", labels = "95% cred. int.") +
+        labs(x = "Number of tosses", y = "Posterior probability") +
+        coord_cartesian(expand = FALSE, ylim = c(0, 1)) +
+        scale_x_continuous(breaks = scales::pretty_breaks()) +
+        theme(legend.title = element_blank())
 ```
