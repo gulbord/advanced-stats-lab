@@ -74,18 +74,23 @@ Let’s plot the three posteriors on top of each other to compare them.
 library(tidyverse)
 theme_set(theme_light(base_size = 14, base_family = "Lato"))
 
-# probability vector
+# probability vector with step size dp
 dp <- 1 / 2000
 p <- seq(0, 1, by = dp)
 
-# convert data to long format for ggplot
-posts <- tibble(p, post_unif(p), post_jeff(p), post_step(p)) |>
-    set_names("p", "unif", "jeff", "step") |>
+posts <- tibble(
+    p = p,
+    unif = post_unif(p),
+    jeff = post_jeff(p),
+    step = post_step(p)
+) |>
+    # transform to long format for ggplot
     pivot_longer(-1, names_to = "dist", values_to = "fp") |>
+    # reorder `dist` factors to follow the order in the text
     mutate(dist = fct_relevel(dist, "unif", "jeff", "step"))
 
 prior_names <- c(unif = "Uniform", jeff = "Jeffrey’s", step = "Step")
-# palette
+# define color palette and map colours to prior names
 my_pal <- c("#EE9C39", "#20A47B", "#5A3920")
 prior_cols <- my_pal |> set_names("unif", "jeff", "step")
 
@@ -93,13 +98,16 @@ ggplot(posts, aes(x = p, y = fp, colour = dist)) +
     geom_line(linewidth = 0.8) +
     scale_colour_manual(values = prior_cols, labels = prior_names) +
     labs(x = "π", y = "g(π | y, n)", colour = "Prior") +
+    # make plot start at (0, 0)
     coord_cartesian(expand = FALSE, ylim = c(0, 6))
 ```
 
 To further the comparison, we can compute the first two moments of each 
 posterior distribution.
 ```{r}
+# define function for later use
 moment <- function(dist, n) {
+    # integrate each function in dist
     purrr::map_dbl(dist, \(f) integrate(\(p) p^n * f(p), 0, 1)$value)
 }
 
@@ -118,6 +126,7 @@ creds <- list(
     jeff = qbeta(thresh, alph_jeff, beta_jeff),
     step = map_dbl(
         thresh,
+        # compute the cdf and find the two p's close to 0.025, 0.975
         \(t) p[which(near(cumsum(post_step(p)) * dp, t, tol = dp / 2))]
     )
 )
@@ -126,8 +135,10 @@ creds <- list(
 Let’s put the results in a summary table, and draw the limits on the
 plot of the posterior distributions.
 ```{r}
+# put table code into function for later use
 summary_table <- function(prior_names, means, variances, creds) {
     tibble::tibble(prior_names, means, variances, creds) |>
+        # format digits in every column
         dplyr::mutate(creds = format(creds, digits = 3)) |>
         dplyr::mutate_if(is.numeric, format, digits = 3) |>
         rlang::set_names("Prior", "Mean", "Variance", "95% cred. int.") |>
@@ -140,11 +151,14 @@ summary_table(prior_names, means, variances, creds)
 ```{r}
 ggplot(posts, aes(x = p, y = fp, colour = dist)) +
     geom_line(linewidth = 0.8) +
+    # shade 95% credibility intervals
     geom_ribbon(
         aes(ymin = 0, ymax = fp, fill = dist),
-        data = posts |> group_by(dist) |>
-            filter(p > creds[[unique(dist)]][1]
-                   & p < creds[[unique(dist)]][2]),
+        data = posts |>
+            group_by(dist) |>
+            # keep only the values inside the cred. int. for each dist
+            filter(p > creds[[unique(dist)]][1] &
+                   p < creds[[unique(dist)]][2]),
         alpha = 0.5,
         show.legend = FALSE
     ) +
@@ -170,7 +184,7 @@ We’ll find the posterior distribution for the probability $\pi$ that one
 sample contains Giardia cysts, assuming
 
 * a uniform prior distribution
-* a $\mathrm{Beta}(1, 4)$ prior
+* a $\operatorname{Beta}(1, 4)$ prior
 
 Once again, we’re looking at a binomial process, so the posterior
 distributions will be just two other beta distributions, with different
@@ -193,31 +207,37 @@ Let’s compute mean, variance and 95% credibility intervals for the two
 posteriors, and display the results in a summary table and a plot. We’ll
 also add a normal approximation for the posterior, based on 
 ```{r}
+# use the function defined before on the new posteriors
 means <- moment(c(post_unif, post_beta), 1)
 variances <- moment(c(post_unif, post_beta), 2) - means^2
 
+# cred. intervals are evaluated with quantile functions
 creds <- list(
     unif = qbeta(thresh, alph_unif, beta_unif),
     beta = qbeta(thresh, alph_beta, beta_beta)
 )
 
+# redefine full names and colour names
 prior_names <- c(unif = "Uniform", beta = "Beta(1, 4)")
 prior_cols <- my_pal[1:2] |> set_names("unif", "beta")
 
+# call the function that prints the table
 summary_table(prior_names, means, variances, creds)
-
-tibble(p, post_unif(p), post_beta(p)) |>
-    set_names("p", "unif", "beta") |>
+```
+```{r}
+# put data in long-format tibble, then plot
+tibble(p = p, unif = post_unif(p), beta = post_beta(p)) |>
     pivot_longer(-1, names_to = "dist", values_to = "fp") |>
     mutate(dist = fct_relevel(dist, "unif", "beta")) |>
     ggplot(aes(x = p, y = fp, colour = dist)) +
         geom_line(linewidth = 0.8) +
+        # shaded credibility intervals
         geom_ribbon(
             aes(ymin = 0, ymax = fp, fill = dist),
             data = function(x) {
                 x |> group_by(dist) |>
-                    filter(p > creds[[unique(dist)]][1]
-                           & p < creds[[unique(dist)]][2])
+                     filter(p > creds[[unique(dist)]][1] &
+                            p < creds[[unique(dist)]][2])
             },
             alpha = 0.5,
             show.legend = FALSE
@@ -226,5 +246,198 @@ tibble(p, post_unif(p), post_beta(p)) |>
         scale_fill_manual(values = prior_cols) +
         labs(x = "π", y = "g(π | y, n)", colour = "Prior") +
         coord_cartesian(expand = FALSE, ylim = c(0, 13.5)) +
+        # fiddle with the axis breaks
         scale_y_continuous(breaks = scales::pretty_breaks())
+```
+
+Since we are working with quite a high number of samples, it’s sensible to
+try approximating the two beta posteriors with normal PDFs. The expected 
+value of a $X \sim \operatorname{Beta}(\alpha, \beta)$ is given by
+$$
+    \operatorname{E}(X) = \frac{\alpha}{\alpha + \beta},
+$$
+while the variance is
+$$
+    \operatorname{Var}(X) =
+        \frac{\alpha \beta}{(\alpha + \beta)^2(\alpha + \beta + 1)}.
+$$
+So, we’ll calculate these two quantities for each `dbeta` and put the
+results in a `dnorm` call.
+```{r}
+mu_unif <- alph_unif / (alph_unif + beta_unif)
+sigma_unif <- sqrt(alph_unif * beta_unif
+                   / ((alph_unif + beta_unif)^2
+                      * (alph_unif + beta_unif + 1)))
+mu_beta <- alph_beta / (alph_beta + beta_beta)
+sigma_beta <- sqrt(alph_beta * beta_beta
+                   / ((alph_beta + beta_beta)^2
+                      * (alph_beta + beta_beta + 1)))
+
+norm_unif <- function(p) dnorm(p, mu_unif, sigma_unif)
+norm_beta <- function(p) dnorm(p, mu_beta, sigma_beta)
+```
+
+Let’s summarize the results in the usual table and plot.
+```{r}
+# credibility intervals
+creds_n <- list(
+    unif = list(
+        orig = creds$unif,
+        appr = qnorm(thresh, mu_unif, sigma_unif)
+    ),
+    beta = list(
+        orig = creds$beta,
+        appr = qnorm(thresh, mu_beta, sigma_beta)
+    )
+)
+
+# summary table
+# the means and variances are, by construction, the same as before
+tibble(
+    prior_names, means, variances, creds,
+    creds_n = list(creds_n$unif$appr, creds_n$beta$appr)
+) |>
+    mutate(
+        creds = format(creds, digits = 3),
+        creds_n = format(creds_n, digits = 3)
+    ) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names(
+        "Prior", "Mean", "Variance",
+        "95% cred. int.", "95% cred. int. (normal appr.)"
+    ) |>
+    kableExtra::kbl() |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+```{r}
+# choose some new colours to distinguish original/approximation
+type_cols <- c(orig = "#ac2941", appr = "#5aa4cd")
+# make a new dataset with the new functions
+tibble(
+    p = p,
+    unif = post_unif(p),
+    unif_n = norm_unif(p),
+    beta = post_beta(p),
+    beta_n = norm_beta(p),
+) |>
+    pivot_longer(-1, names_to = "dist", values_to = "fp") |>
+    # encode the original/approximation distinction in separate column
+    mutate(
+        type = ifelse(str_ends(dist, "_n"), "appr", "orig"),
+        dist = str_remove(dist, "_n")
+    ) |>
+    # reorder factors as needed
+    mutate(
+        dist = fct_relevel(dist, "unif", "beta"),
+        type = fct_relevel(type, "orig", "appr")
+    ) |>
+    ggplot(aes(x = p, y = fp, colour = type)) +
+        geom_line(linewidth = 0.8) +
+        geom_ribbon(
+            aes(ymin = 0, ymax = fp, fill = type),
+            data = function(x) {
+                # group and filter
+                x |>
+                    group_by(dist, type) |>
+                    filter(p > creds_n[[unique(dist)]][[unique(type)]][1] &
+                           p < creds_n[[unique(dist)]][[unique(type)]][2])
+            },
+            alpha = 0.5,
+            show.legend = FALSE
+        ) +
+        scale_colour_manual(
+            values = type_cols, labels = c("Original", "Normal appr.")
+        ) +
+        scale_fill_manual(values = type_cols) +
+        labs(x = "π", y = "g(π | y, n)", colour = "Type") +
+        coord_cartesian(expand = FALSE, ylim = c(0, 13.5)) +
+        scale_y_continuous(breaks = scales::pretty_breaks()) +
+        facet_grid(
+            rows = vars(dist),
+            labeller = as_labeller(
+                c(unif = "Uniform prior", beta = "Beta(1, 4) prior")
+            )
+        )
+```
+
+# Coin flipping
+A coin is flipped 30 times with the following outcomes:
+```
+    T, T, T, T, T, H, T, T, H, H,
+    T, T, H, H, H, T, H, T, H, T,
+    H, H, T, H, T, H, T, H, H, H
+```
+
+We’ll assume a flat prior and a $\operatorname{Beta}(10, 10)$ prior, and
+plot the likelihood, prior and posterior distributions following the two
+assumptions.
+```{r}
+results <- c(
+    "T", "T", "T", "T", "T", "H", "T", "T", "H", "H",
+    "T", "T", "H", "H", "H", "T", "H", "T", "H", "T",
+    "H", "H", "T", "H", "T", "H", "T", "H", "H", "H"
+)
+
+n <- length(results)     # total throws
+h <- sum(results == "H") # number of heads
+
+# likelihood
+lhood <- function(p) {
+    dbinom(h, n, p) / integrate(\(x) dbinom(h, n, x), 0, 1)$value
+}
+
+# beta prior parameters
+a <- 10
+b <- 10
+
+# priors
+prior_flat <- function(p) dunif(p, 0, 1)
+prior_beta <- function(p) dbeta(p, a, b)
+
+# posterior parameters
+alph_flat <- 1 + h
+beta_flat <- 1 + n - h
+alph_beta <- a + h
+beta_beta <- b + n - h
+
+# posteriors
+post_flat <- function(p) dbeta(p, alph_flat, beta_flat)
+post_beta <- function(p) dbeta(p, alph_beta, beta_beta)
+```
+
+```{r}
+# define palette
+dist_cols <- my_pal |> set_names("lik", "pri", "pos")
+dist_names <- c(lik = "Likelihood", pri = "Prior", pos = "Posterior")
+
+tibble(
+    p = p,
+    # duplicate the likelihood to help facet_grid later
+    flat_lik = lhood(p),
+    flat_pri = prior_flat(p),
+    flat_pos = post_flat(p),
+    beta_lik = lhood(p),
+    beta_pri = prior_beta(p),
+    beta_pos = post_beta(p)
+) |>
+    pivot_longer(-1, names_to = "prior", values_to = "fp") |>
+    # move lik/pri/pos indicator to `dist` column
+    # keep only flat/beta indicator in `prior` column
+    mutate(dist = str_sub(prior, -3), prior = str_sub(prior, 1, 4)) |>
+    mutate(
+        dist = fct_relevel(dist, "lik", "pri", "pos"),
+        prior = fct_relevel(prior, "flat", "beta")
+    ) |>
+    ggplot(aes(x = p, y = fp, colour = dist)) +
+        geom_line(linewidth = 0.8) +
+        scale_colour_manual(values = dist_cols, labels = dist_names) +
+        scale_fill_manual(values = dist_cols) +
+        labs(x = "π", y = "f(π)", colour = "Distribution") +
+        coord_cartesian(expand = FALSE, ylim = c(0, 6)) +
+        facet_grid(
+            rows = vars(prior),
+            labeller = as_labeller(
+                c(flat = "Flat prior", beta = "Beta(10, 10) prior")
+            )
+        )
 ```
