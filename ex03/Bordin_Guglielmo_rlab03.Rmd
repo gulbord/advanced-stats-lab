@@ -3,12 +3,10 @@ title: R Laboratory – Exercise 3
 author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
-    rmdformats::readthedown:
-        fig_width: 8
-        fig_height: 5
-        thumbnails: false
-        lightbox: true
-        gallery: true
+    prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
 ---
 
 ```{r setup, include = FALSE}
@@ -27,6 +25,7 @@ We’ll assume three different priors:
 * a uniform distribution
 * a Jeffrey’s prior
 * a step function defined as
+
 $$
     g(\pi) =
     \begin{cases}
@@ -170,7 +169,7 @@ ggplot(posts, aes(x = p, y = fp, colour = dist)) +
 
 # Giardia cysts
 Giardia cysts are a parasite that can contaminate food, water and surfaces,
-and they can cause *giardiasis* when swallowed in this infective stage of
+and they can cause giardiasis when swallowed in this infective stage of
 their life cycle. Infection occurs when a person swallows Giardia cysts 
 from contaminated water, food, hands, surfaces or objects.
 
@@ -253,14 +252,18 @@ tibble(p = p, unif = post_unif(p), beta = post_beta(p)) |>
 Since we are working with quite a high number of samples, it’s sensible to
 try approximating the two beta posteriors with normal PDFs. The expected 
 value of a $X \sim \operatorname{Beta}(\alpha, \beta)$ is given by
+
 $$
     \operatorname{E}(X) = \frac{\alpha}{\alpha + \beta},
 $$
+
 while the variance is
+
 $$
     \operatorname{Var}(X) =
         \frac{\alpha \beta}{(\alpha + \beta)^2(\alpha + \beta + 1)}.
 $$
+
 So, we’ll calculate these two quantities for each `dbeta` and put the
 results in a `dnorm` call.
 ```{r}
@@ -472,7 +475,6 @@ portion of the data. The posterior obtained at each step will be used as
 the prior in the next.
 
 ```{r}
-# form vectors to hold credibility intervals and modes
 modes <- numeric(n)
 creds <- replicate(n, numeric(2))
 # define first prior parameters (uniform --> alpha = beta = 1)
@@ -480,12 +482,10 @@ a <- 1
 b <- 1
 
 for (i in seq_along(results)) {
-    # count heads
     h <- sum(results[1:i] == "H")
-    # update alpha and beta
     a <- a + h
     b <- b + i - h
-    # compute posterior and parameters
+
     post <- dbeta(p, a, b)
     modes[i] <- p[which.max(post)]
     # if h = 0 compute the one-sided interval
