@@ -71,7 +71,7 @@ post_step <- function(p) {
 Let’s plot the three posteriors on top of each other to compare them.
 ```{r}
 library(tidyverse)
-theme_set(theme_light(base_size = 14, base_family = "Lato"))
+theme_set(theme_light(base_size = 14, base_family = "Open Sans"))
 
 # probability vector with step size dp
 dp <- 1 / 2000
@@ -469,10 +469,9 @@ tibble(names = c("Uniform", "Beta"), modes, means, variances, creds) |>
     kableExtra::kable_styling(full_width = FALSE)
 ```
 
-Now, we try to repeat the same analysis in a sequential way. We’ll
-incrementally subset the `results` vector and perform the analysis on that
-portion of the data. The posterior obtained at each step will be used as
-the prior in the next.
+Now, we try to repeat the same analysis in a sequential way.  This means
+that we’ll consider only one throw at each iteration, using the posterior
+as prior in the next step.
 
 ```{r}
 modes <- numeric(n)
@@ -482,14 +481,15 @@ a <- 1
 b <- 1
 
 for (i in seq_along(results)) {
-    h <- sum(results[1:i] == "H")
+    h <- results[i] == "H"
     a <- a + h
-    b <- b + i - h
+    b <- b + 1 - h
 
     post <- dbeta(p, a, b)
     modes[i] <- p[which.max(post)]
-    # if h = 0 compute the one-sided interval
-    creds[, i] <- qbeta(if (h != 0) c(0.025, 0.975) else c(0, 0.95), a, b)
+    # if mode = 0 compute the one-sided interval
+    creds[, i] <- qbeta(if (modes[i] != 0) c(0.025, 0.975)
+                        else c(0, 0.95), a, b)
 }
 ```
 
@@ -514,3 +514,22 @@ tibble(
         scale_x_continuous(breaks = scales::pretty_breaks()) +
         theme(legend.title = element_blank())
 ```
+
+As we can see, the end result is the same, in terms of the most probable
+value. Let’s see if the credibility intervals are different.
+
+```{r}
+cat(
+    "95% cred. int. from normal analysis:\n ",
+    format(qbeta(thresh, alph_unif, beta_unif), digits = 3),
+    " [uniform prior]\n ",
+    format(qbeta(thresh, alph_beta, beta_beta), digits = 3),
+    " [beta prior]\n\n95% cred. int. from sequential analysis\n ",
+    format(creds[, ncol(creds)], digits = 3)
+)
+```
+
+Indeed, the result is the same as the one we had obtained from the uniform
+prior in the normal analysis.
+
+# Six boxes toy model 
