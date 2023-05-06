@@ -10,7 +10,11 @@ output:
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(dev = "svg", message = FALSE)
+knitr::opts_chunk$set(
+    dev = "svg", fig.width = 8, fig.height = 5, message = FALSE
+)
+
+set.seed(13)
 ```
 
 # Binomial inference
@@ -529,7 +533,65 @@ cat(
 )
 ```
 
-Indeed, the result is the same as the one we had obtained from the uniform
-prior in the normal analysis.
+Indeed, the end result is identical to the one we had obtained from the
+uniform prior in the normal analysis.
 
 # Six boxes toy model 
+We have six boxes labelled $H_i$ with $i = 0, 1, \dots, 5$. Each box $H_i$
+contains $i$ white balls and $5 - i$ black balls. We randomly choose one
+box without knowing which it is, and begin extracting balls from it,
+putting them back after each extraction. Can we determine which box we have
+based on the frequency of extracted white and black balls?
+
+Let’s simulate the process with R.
+```{r}
+# probability of extracting a white ball from each box
+p_white <- c(0, 0.2, 0.4, 0.6, 0.8, 1) |> set_names(1:6)
+# boxes list
+boxes <- map(0:5, \(i) c(rep("W", i), rep("B", 5 - i)))
+
+# choose a random box
+box_num <- sample.int(6, size = 1)
+# sample balls with replacement from the chosen box
+ntrials <- 30
+balls <- sample(boxes[[box_num]], size = ntrials, replace = TRUE)
+```
+
+To construct a dataframe with the (posterior) probabilities associated with
+each box, we start by filling the box columns with the probabilities of
+extracting white or black from each box, depending on the values in the
+`balls` vector. Then, we incrementally multiply every row, the likelihood,
+with the previous, the prior. Finally, we normalize every row by its sum.
+```{r}
+probs <- map_dfr(p_white, \(p) ifelse(balls == "W", p, 1 - p)) |>
+    map_dfr(\(col) accumulate(col, `*`, .init = 1 / 6)) |>
+    mutate(rsum = rowSums(across(everything()))) |>
+    mutate(across(-rsum, \(x) x / rsum), .keep = "none") |>
+    add_column(trial = 0:ntrials, ball = c("-", balls), .before = 1)
+```
+```{r, echo = FALSE}
+probs |>
+    set_names("Trial", "Ball", map_chr(1:6, \(n) paste("Box", n))) |>
+    kableExtra::kbl()
+```
+
+Finally, we plot the probability for each box as a function of the trial
+number.
+```{r, fig.width = 9, fig.height = 6}
+box_labels <- c("●●●●●", "○●●●●", "○○●●●", "○○○●●", "○○○○●", "○○○○○") |>
+    set_names(1:6)
+
+probs |>
+    select(-ball) |>
+    pivot_longer(-trial, names_to = "box", values_to = "prob") |>
+    ggplot(aes(x = trial, y = prob)) +
+        geom_point(size = 0.8, colour = my_pal[2]) +
+        scale_y_continuous(
+            limits = c(0, 1),
+            breaks = scales::pretty_breaks()
+        ) +
+        labs(x = "Extraction", y = "Box probability") +
+        facet_wrap(vars(box), labeller = as_labeller(box_labels)) +
+        theme(strip.background = element_rect(fill = "gray90")) +
+        theme(strip.text = element_text(colour = "black"))
+```
