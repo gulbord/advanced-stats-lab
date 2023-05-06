@@ -254,31 +254,12 @@ tibble(p = p, unif = post_unif(p), beta = post_beta(p)) |>
 ```
 
 Since we are working with quite a high number of samples, it’s sensible to
-try approximating the two beta posteriors with normal PDFs. The expected 
-value of a $X \sim \operatorname{Beta}(\alpha, \beta)$ is given by
-
-$$
-    \operatorname{E}(X) = \frac{\alpha}{\alpha + \beta},
-$$
-
-while the variance is
-
-$$
-    \operatorname{Var}(X) =
-        \frac{\alpha \beta}{(\alpha + \beta)^2(\alpha + \beta + 1)}.
-$$
-
-So, we’ll calculate these two quantities for each `dbeta` and put the
-results in a `dnorm` call.
+try approximating the two beta posteriors with normal PDFs.
 ```{r}
-mu_unif <- alph_unif / (alph_unif + beta_unif)
-sigma_unif <- sqrt(alph_unif * beta_unif
-                   / ((alph_unif + beta_unif)^2
-                      * (alph_unif + beta_unif + 1)))
-mu_beta <- alph_beta / (alph_beta + beta_beta)
-sigma_beta <- sqrt(alph_beta * beta_beta
-                   / ((alph_beta + beta_beta)^2
-                      * (alph_beta + beta_beta + 1)))
+mu_unif <- means[1]
+sigma_unif <- sqrt(variances[1])
+mu_beta <- means[2]
+sigma_beta <- sqrt(variances[2])
 
 norm_unif <- function(p) dnorm(p, mu_unif, sigma_unif)
 norm_beta <- function(p) dnorm(p, mu_beta, sigma_beta)
