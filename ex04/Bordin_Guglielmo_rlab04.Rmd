@@ -1,0 +1,75 @@
+---
+title: R Laboratory – Exercise 4
+author: Guglielmo Bordin
+date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
+output:
+    prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    dev = "svg", fig.width = 8, fig.height = 5, message = FALSE
+)
+```
+
+# Insurance claims
+The number of claims received by an insurance company during a week follows
+a Poisson distribution with unknown mean $\mu$. The claims per week
+observed over a ten week period are:
+```
+5, 8, 4, 6, 11, 6, 6, 5, 6, 4
+```
+
+We’ll start by computing the posterior distribution with the assumption of
+a uniform prior for $\mu$. Let’s first define a helpful `bayes` function
+to calculate everything we need in the analysis.
+```{r}
+bayes <- function(lhood, prior, max_mu, cred_int = c(0.025, 0.975)) {
+    dm <- 0.001
+    m <- seq(0, max_mu, by = dm)
+    # get denominator (evidence)
+    evid <- integrate(\(x) lhood(x) * prior(x), 0, Inf)$value
+    # assemble posterior
+    post <- lhood(m) * prior(m) / evid
+    cdf <- cumsum(post) * dm
+
+    # get posterior mode, median, mean and std
+    mode <- m[which.max(post)]
+    median <- m[which.max(cdf > 0.5)]
+    mean <- sum(m * post) * dm
+    std <- sqrt(sum((m - mean)^2 * post) * dm)
+
+    # get credibility interval
+    cred <- sapply(cred_int, \(c) m[which.max(cdf > c)])
+
+    # return named list
+    list(
+        post = post, mode = mode, med = median,
+        mean = mean, std = std, cred = cred
+    )
+}
+```
+Now, let’s start with the uniform prior.
+```{r}
+claims <- c(5, 8, 4, 6, 11, 6, 6, 5, 6, 4)
+n <- length(claims)
+
+# poissonian likelihood
+lhood <- \(m) m^sum(claims) * exp(-n * m)
+# g(mu) = 1 for all mu --> improper prior (divergent integral)
+post_unif <- bayes(lhood, \(m) 1, max_mu = 2 * max(claims))
+```
+```{r, echo = FALSE}
+library(tidyverse)
+
+tibble(
+    post_unif$mode, post_unif$med, post_unif$mean, post_unif$std,
+    paste(post_unif$cred, collapse = ", ")
+) |>
+    set_names("Mode", "Median", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
