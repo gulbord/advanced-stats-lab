@@ -566,12 +566,17 @@ probs |>
     select(-ball) |>
     pivot_longer(-trial, names_to = "box", values_to = "prob") |>
     ggplot(aes(x = trial, y = prob)) +
-        geom_point(size = 0.8, colour = my_pal[2]) +
+        geom_line(linewidth = 0.5, colour = my_pal[3]) +
+        geom_point(size = 1.5, colour = my_pal[3]) +
         scale_y_continuous(
             limits = c(0, 1),
             breaks = scales::pretty_breaks()
         ) +
-        labs(x = "Extraction", y = "Box probability") +
+        labs(
+            x = "Extraction",
+            y = "Box probability",
+            title = paste("Chosen box:", box_labels[box_num])
+        ) +
         facet_wrap(vars(box), labeller = as_labeller(box_labels)) +
         theme(strip.background = element_rect(fill = "gray90")) +
         theme(strip.text = element_text(colour = "black"))
