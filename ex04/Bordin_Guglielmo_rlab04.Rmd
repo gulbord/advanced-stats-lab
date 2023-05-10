@@ -60,7 +60,8 @@ n <- length(claims)
 # poissonian likelihood
 lhood <- \(m) m^sum(claims) * exp(-n * m)
 # g(mu) = 1 for all mu --> improper prior (divergent integral)
-post_unif <- bayes(lhood, \(m) 1, max_mu = 2 * max(claims))
+max_mu <- 1.5 * max(claims)
+post_unif <- bayes(lhood, \(m) 1, max_mu)
 ```
 ```{r, echo = FALSE}
 library(tidyverse)
@@ -72,4 +73,80 @@ tibble(
     set_names("Mode", "Median", "Mean", "St. dev.", "95% cred. int.") |>
     kableExtra::kbl(caption = "Posterior parameters") |>
     kableExtra::kable_styling(full_width = FALSE)
+```
+Now, we’ll use a Jeffrey’s prior instead, that is
+
+$$
+    g(\mu) = \frac{1}{\sqrt{\mu}}.
+$$
+
+This is another improper prior, but it’s not a problem since we normalize
+numerically the posterior inside the `bayes` function.
+
+To handle the value at 0 correctly, we also set $g(\mu) = 0$ for $\mu = 0$,
+to avoid a divergence in the posterior.
+```{r}
+post_jeff <- bayes(lhood, \(m) ifelse(m > 0, 1 / sqrt(m), 0), max_mu)
+```
+```{r, echo = FALSE}
+tibble(
+    post_jeff$mode, post_jeff$med, post_jeff$mean, post_jeff$std,
+    paste(post_jeff$cred, collapse = ", ")
+) |>
+    set_names("Mode", "Median", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+Let’s plot the two posteriors with their credibility intervals.
+```{r}
+my_pal <- c("#EE9C39", "#20A47B", "#5A3920")
+theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
+
+creds <- list(unif = post_unif$cred, jeff = post_jeff$cred)
+prior_names <- c(unif = "Uniform", jeff = "Jeffrey’s")
+prior_cols <- my_pal[1:2] |> set_names("unif", "jeff")
+
+tibble(
+    mu = seq(0, max_mu, by = 0.001),
+    unif = post_unif$post,
+    jeff = post_jeff$post,
+) |>
+    # transform to long format for ggplot
+    pivot_longer(-1, names_to = "dist", values_to = "f") |>
+    # reorder `dist` factors to follow the order in the text
+    mutate(dist = fct_relevel(dist, "unif", "jeff")) |>
+    ggplot(aes(x = mu, y = f, colour = dist)) +
+        geom_line(linewidth = 0.8) +
+        # shade 95% credibility intervals
+        geom_area(
+            aes(fill = dist),
+            data = function(x) {
+                x |> group_by(dist) |>
+                     filter(mu > creds[[unique(dist)]][1] &
+                            mu < creds[[unique(dist)]][2])
+            },
+            position = "identity",
+            alpha = 0.5,
+            show.legend = FALSE
+        ) +
+        scale_colour_manual(values = prior_cols, labels = prior_names) +
+        scale_fill_manual(values = prior_cols) +
+        labs(
+            x = "Poisson parameter μ",
+            y = "Posterior distribution P(μ | y)",
+            colour = "Prior"
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 0.55))
+```
+
+Finally, let’s approximate the two posteriors with a normal distribution
+with the same mean and standard deviation, and compare the credibility
+intervals.
+```{r}
+tibble(
+    c("Uniform", "Jeffrey’s"),
+    c(post_unif$mean, post_jeff$mean),
+    c(post_unif$std, post_jeff$std),
+)
 ```
