@@ -4,7 +4,7 @@ author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
     prettydoc::html_pretty:
-        theme: cayman
+        theme: architect
         highlight: github
         math: katex
 ---
@@ -27,23 +27,23 @@ We’ll start by computing the posterior distribution with the assumption of
 a uniform prior for $\mu$. Let’s first define a helpful `bayes` function
 to calculate everything we need in the analysis.
 ```{r}
-bayes <- function(lhood, prior, max_mu, cred_int = c(0.025, 0.975)) {
-    dm <- 0.001
-    m <- seq(0, max_mu, by = dm)
+bayes <- function(lhood, prior, max, cred_int = c(0.025, 0.975)) {
+    dx <- 0.001
+    x <- seq(0, max, by = dx)
     # get denominator (evidence)
-    evid <- integrate(\(x) lhood(x) * prior(x), 0, Inf)$value
+    evid <- integrate(\(y) lhood(y) * prior(y), 0, max)$value
     # assemble posterior
-    post <- lhood(m) * prior(m) / evid
-    cdf <- cumsum(post) * dm
+    post <- lhood(x) * prior(x) / evid
+    cdf <- cumsum(post) * dx
 
     # get posterior mode, median, mean and std
-    mode <- m[which.max(post)]
-    median <- m[which.max(cdf > 0.5)]
-    mean <- sum(m * post) * dm
-    std <- sqrt(sum((m - mean)^2 * post) * dm)
+    mode <- x[which.max(post)]
+    median <- x[which.max(cdf > 0.5)]
+    mean <- sum(x * post) * dx
+    std <- sqrt(sum((x - mean)^2 * post) * dx)
 
     # get credibility interval
-    cred <- sapply(cred_int, \(c) m[which.max(cdf > c)])
+    cred <- sapply(cred_int, \(c) x[which.max(cdf > c)])
 
     # return named list
     list(
@@ -63,7 +63,7 @@ lhood <- \(m) m^sum(claims) * exp(-n * m)
 max_mu <- 1.5 * max(claims)
 dmu <- 0.001
 # g(mu) = 1 for all mu --> improper prior (divergent integral)
-post_unif <- bayes(lhood, \(m) 1, max_mu)
+post_unif <- bayes(lhood, \(m) 1, max = max_mu)
 ```
 ```{r, echo = FALSE}
 library(tidyverse)
@@ -102,7 +102,7 @@ tibble(
 
 Let’s plot the two posteriors with their credibility intervals.
 ```{r}
-my_pal <- c("#EE9C39", "#20A47B", "#5A3920")
+my_pal <- wesanderson::wes_palette("Zissou1", 5)[c(1, 3, 5)]
 theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
 
 prior_names <- c(unif = "Uniform", jeff = "Jeffrey’s")
@@ -185,4 +185,40 @@ During the qualification phase, a random sample of $n = 75$ patients known
 to have the disease is screened using the new method.
 
 The probability distribution of $y$, the number of times the new method
-fails to detect the disease.
+fails to detect the disease, is a binomial with $n = 75$. The method fails 
+to detect the disease in 6 cases. Following a frequentist approach, we
+would say that an unbiased estimator for the probability of our binomial
+distribution is given by
+
+$$
+    \hat{p}_\mathrm{f} = \frac{y}{n} = \frac{6}{75} = 0.08,
+$$
+
+with standard deviation
+
+$$
+    \sigma = \sqrt{\operatorname{Var}[\hat{p}_\mathrm{f}]}
+        = \sqrt{\frac{y}{n^2}\biggl(1 - \frac{y}{n}\biggr)}
+        = 0.031.
+$$
+
+Let’s proceed now with a bayesian computation, assuming a beta prior with
+mean value $0.15$ and standard deviation $0.14$.
+```{r}
+y <- 6
+n <- 75
+
+mu <- 0.15
+sig <- 0.14
+
+# formulas to get alpha and beta from mean and sigma
+alpha <- mu * (mu * (1 - mu) / sig^2 - 1)
+beta <- (1 - mu) * alpha / mu
+
+post_beta <- bayes(
+    lhood = \(p) p^y * (1 - p)^(n - y),
+    # handle the 0 value correctly
+    prior = \(p) ifelse(p > 0, dbeta(p, alpha, beta), 0),
+    max = 1
+)
+```
