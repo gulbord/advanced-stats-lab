@@ -59,8 +59,10 @@ n <- length(claims)
 
 # poissonian likelihood
 lhood <- \(m) m^sum(claims) * exp(-n * m)
-# g(mu) = 1 for all mu --> improper prior (divergent integral)
+
 max_mu <- 1.5 * max(claims)
+dmu <- 0.001
+# g(mu) = 1 for all mu --> improper prior (divergent integral)
 post_unif <- bayes(lhood, \(m) 1, max_mu)
 ```
 ```{r, echo = FALSE}
@@ -103,12 +105,12 @@ Let’s plot the two posteriors with their credibility intervals.
 my_pal <- c("#EE9C39", "#20A47B", "#5A3920")
 theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
 
-creds <- list(unif = post_unif$cred, jeff = post_jeff$cred)
 prior_names <- c(unif = "Uniform", jeff = "Jeffrey’s")
 prior_cols <- my_pal[1:2] |> set_names("unif", "jeff")
-
+```
+```{r}
 tibble(
-    mu = seq(0, max_mu, by = 0.001),
+    mu = seq(0, max_mu, by = dmu),
     unif = post_unif$post,
     jeff = post_jeff$post,
 ) |>
@@ -123,8 +125,8 @@ tibble(
             aes(fill = dist),
             data = function(x) {
                 x |> group_by(dist) |>
-                     filter(mu > creds[[unique(dist)]][1] &
-                            mu < creds[[unique(dist)]][2])
+                     filter(mu > mu[which.max(cumsum(f) * dmu > 0.025)] &
+                            mu < mu[which.max(cumsum(f) * dmu > 0.975)])
             },
             position = "identity",
             alpha = 0.5,
@@ -144,9 +146,43 @@ Finally, let’s approximate the two posteriors with a normal distribution
 with the same mean and standard deviation, and compare the credibility
 intervals.
 ```{r}
+thr <- c(0.025, 0.975)
+
 tibble(
-    c("Uniform", "Jeffrey’s"),
-    c(post_unif$mean, post_jeff$mean),
-    c(post_unif$std, post_jeff$std),
-)
+    prior = c("Uniform", "Jeffrey’s"),
+    mean = c(post_unif$mean, post_jeff$mean),
+    std = c(post_unif$std, post_jeff$std),
+    cred = c(
+        paste(post_unif$cred, collapse = ", "),
+        paste(post_jeff$cred, collapse = ", ")
+    ),
+    cred_n = c(
+        paste(
+            format(qnorm(thr, post_unif$mean, post_unif$std), digits = 4),
+            collapse = ", "
+        ),
+        paste(
+            format(qnorm(thr, post_jeff$mean, post_jeff$std), digits = 4),
+            collapse = ", "
+        )
+    )
+) |>
+    mutate_if(is.numeric, format, digits = 4) |>
+    set_names(
+        "Prior", "Mean", "St. dev.",
+        "95% cred. int.", "95% cred. int. (normal approx.)"
+    ) |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
 ```
+
+# Blood tests
+A well established method for detecting a disease in blood fails to detect 
+it in 15% of the patiants that actually have the disease.
+
+A young UniPd start-up has developed an innovative method of screening.
+During the qualification phase, a random sample of $n = 75$ patients known
+to have the disease is screened using the new method.
+
+The probability distribution of $y$, the number of times the new method
+fails to detect the disease.
