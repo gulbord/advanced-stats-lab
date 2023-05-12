@@ -110,7 +110,7 @@ prior_cols <- my_pal[1:2] |> set_names("unif", "jeff")
 ```
 ```{r}
 tibble(
-    mu = seq(0, max_mu, by = dmu),
+    mu = seq(0, max_mu, along.with = post_unif$post),
     unif = post_unif$post,
     jeff = post_jeff$post,
 ) |>
@@ -129,8 +129,7 @@ tibble(
                             mu < mu[which.max(cumsum(f) * dmu > 0.975)])
             },
             position = "identity",
-            alpha = 0.5,
-            show.legend = FALSE
+            alpha = 0.5, show.legend = FALSE
         ) +
         scale_colour_manual(values = prior_cols, labels = prior_names) +
         scale_fill_manual(values = prior_cols) +
@@ -174,6 +173,59 @@ tibble(
     ) |>
     kableExtra::kbl(caption = "Posterior parameters") |>
     kableExtra::kable_styling(full_width = FALSE)
+```
+The normal approximation works well enough in both cases; after all, with
+10 data points this was to be expected.
+```{r}
+m <- seq(0, max_mu, along.with = post_unif$post)
+type_cols <- my_pal[c(1, 3)]
+
+tibble(
+    mu = m,
+    unif = post_unif$post,
+    unif_n = dnorm(m, post_unif$mean, post_unif$std),
+    jeff = post_jeff$post,
+    jeff_n = dnorm(m, post_jeff$mean, post_jeff$std)
+) |>
+    pivot_longer(-mu, names_to = "dist", values_to = "f") |>
+    # encode the original/approx. distinction in separate column
+    mutate(
+        type = ifelse(str_ends(dist, "_n"), "appr", "orig"),
+        dist = str_remove(dist, "_n")
+    ) |>
+    # reorder factors as needed
+    mutate(
+        dist = fct_relevel(dist, "unif", "jeff"),
+        type = fct_relevel(type, "orig", "appr")
+    ) |>
+    ggplot(aes(x = mu, y = f, colour = type)) +
+        geom_line(linewidth = 0.8) +
+        geom_area(
+            aes(fill = type),
+            data = function(x) {
+                x |> group_by(dist, type) |>
+                     filter(mu > mu[which.max(cumsum(f) * dmu > 0.025)] &
+                            mu < mu[which.max(cumsum(f) * dmu > 0.975)])
+            },
+            position = "identity",
+            alpha = 0.5, show.legend = FALSE
+        ) +
+        scale_colour_manual(
+            values = type_cols, labels = c("Original", "Normal appr.")
+        ) +
+        scale_fill_manual(values = type_cols) +
+        labs(
+            x = "Poisson parameter μ",
+            y = "Posterior distribution P(μ | y)",
+            colour = "Type"
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 0.55)) +
+        facet_grid(
+            rows = vars(dist),
+            labeller = as_labeller(
+                c(unif = "Uniform prior", jeff = "Jeffrey’s prior")
+            )
+        )
 ```
 
 # Blood tests
@@ -221,4 +273,50 @@ post_beta <- bayes(
     prior = \(p) ifelse(p > 0, dbeta(p, alpha, beta), 0),
     max = 1
 )
+```
+Now we can plot the resulting posterior distribution, highlighting the mean
+and an interval of one standard deviation around it.
+```{r}
+p <- seq(0, 1, along.with = post_beta$post)
+tibble(p, fp = post_beta$post) |>
+    ggplot(aes(x = p, y = fp)) +
+        geom_line(
+            aes(x = p, y = fp, linetype = "prior"),
+            data = tibble(p, fp = dbeta(.data$p, alpha, beta)),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        geom_line(
+            aes(linetype = "post"),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        # standard deviation shading
+        geom_area(
+            data = function(x) {
+                m <- post_beta$mean
+                s <- post_beta$std
+                filter(x, p > m - s & p < m + s)
+            },
+            colour = my_pal[1], fill = my_pal[1],
+            alpha = 0.5, show.legend = FALSE
+        ) +
+        # mean line
+        geom_vline(xintercept = post_beta$mean, colour = my_pal[1]) +
+        annotate(
+            "label", x = 0.1, y = 13.5, hjust = 0,
+            label = paste(
+                "Mean ± Std =",
+                format(post_beta$mean, digits = 2), "±",
+                format(post_beta$std, digits = 2)
+            )
+        ) +
+        scale_linetype_manual(
+            values = c(post = "solid", prior = "dotted"),
+            labels = c(post = "Posterior", prior = "Prior")
+        ) +
+        labs(
+            x = "Binomial probability π",
+            y = element_blank(),
+            linetype = "Distribution"
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 15))
 ```
