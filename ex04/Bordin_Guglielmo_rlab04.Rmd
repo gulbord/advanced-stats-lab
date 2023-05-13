@@ -230,7 +230,7 @@ tibble(
 
 # Blood tests
 A well established method for detecting a disease in blood fails to detect 
-it in 15% of the patiants that actually have the disease.
+it in 15% of the patients that actually have the disease.
 
 A young UniPd start-up has developed an innovative method of screening.
 During the qualification phase, a random sample of $n = 75$ patients known
@@ -255,7 +255,16 @@ $$
 $$
 
 Let’s proceed now with a bayesian computation, assuming a beta prior with
-mean value $0.15$ and standard deviation $0.14$.
+mean value $0.15$ and standard deviation $0.14$. We know from the theory
+that the posterior distribution of a binomial process with a beta prior is
+given by another beta distribution, with parameters
+
+$$
+    \alpha = \alpha_\mathrm{p} + y, \quad \beta = \beta_\mathrm{p} + n - y,
+$$
+
+with $\alpha_\mathrm{p}$, $\beta_\mathrm{p}$ the parameters of the prior.
+However, we’ll still use the `bayes` function for the moment.
 ```{r}
 y <- 6
 n <- 75
@@ -264,18 +273,29 @@ mu <- 0.15
 sig <- 0.14
 
 # formulas to get alpha and beta from mean and sigma
-alpha <- mu * (mu * (1 - mu) / sig^2 - 1)
-beta <- (1 - mu) * alpha / mu
+(alpha <- mu * (mu * (1 - mu) / sig^2 - 1))
+(beta <- (1 - mu) * alpha / mu)
 
 post_beta <- bayes(
-    lhood = \(p) p^y * (1 - p)^(n - y),
+    lhood = \(p) p**y * (1 - p)**(n - y),
     # handle the 0 value correctly
     prior = \(p) ifelse(p > 0, dbeta(p, alpha, beta), 0),
     max = 1
 )
 ```
-Now we can plot the resulting posterior distribution, highlighting the mean
-and an interval of one standard deviation around it.
+```{r, echo = FALSE}
+tibble(
+    post_beta$mode, post_beta$med, post_beta$mean, post_beta$std,
+    paste(post_beta$cred, collapse = ", ")
+) |>
+    set_names("Mode", "Median", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+We can see that the peak of the posterior is shifted a bit to the left of
+the frequentist expected value $0.08$. This is due to the prior’s
+influence: let’s plot the posterior together with the prior and see what is
+happening.
 ```{r}
 p <- seq(0, 1, along.with = post_beta$post)
 tibble(p, fp = post_beta$post) |>
@@ -314,9 +334,133 @@ tibble(p, fp = post_beta$post) |>
             labels = c(post = "Posterior", prior = "Prior")
         ) +
         labs(
-            x = "Binomial probability π",
+            x = "Binomial probability",
             y = element_blank(),
             linetype = "Distribution"
         ) +
         coord_cartesian(expand = FALSE, ylim = c(0, 15))
 ```
+The selected prior places high values near $\pi = 0$, causing the peak of
+the likelihood (which is precisely 0.08) to shift slightly towards the
+left. At the same time, the slow decay of the prior towards the right is
+making the posterior distribution more asymmetric, leading to a shift of
+the mean value towards the right, `r format(post_beta$mean, digits = 2)`.
+
+Now, let's conduct a hypothesis test. We assume that if the probability of
+failing to detect the disease in sick patients is greater than or equal to
+15%, the new test is no better than the traditional method. We’ll test
+the sample at a 5% level of significance, continuining with the Bayesian 
+approach.
+
+We can formulate our null hypothesis as follows: the binomial parameter of
+the posterior distribution for the new method is $p \geq p_0$, where $p_0 =
+0.15$ is the probability of failure associated with the traditional test.
+Of course, the alternative hypothesis is then $p < p_0$, i.e. the new test 
+is better than the other.
+
+In the Bayesian framework, we need to calculate the probability of
+observing the data under the null hypothesis by integrating the posterior
+probability over the region where the null hypothesis is true. If this
+probability is smaller than the chosen level of significance $\alpha =
+0.05$, we reject the null hypothesis and accept the alternative one.
+
+To take advantage of R’s `integrate` function, we’ll redefine the posterior
+as a function `dbeta` with the posterior parameters that we previously
+discussed.
+```{r}
+post <- \(x) dbeta(x, alpha + y, beta + n - y)
+p0 <- 0.15
+
+integrate(post, p0, 1)
+```
+We can see from the analysis that the posterior probability of the null
+hypothesis (i.e., that the new test is no better than the old one) is
+smaller than the chosen significance level of 0.05. Therefore, we can
+accept the alternative hypothesis and say that the new test is better than
+the old one at a 5% level of significance.
+
+Let’s highlight the integration region and the level of significance
+on the posterior plot.
+```{r}
+# significance level from quantile function
+signif <- qbeta(1 - 0.05, alpha + y, beta + n - y)
+prob_h0 <- integrate(post, p0, 1)$value
+
+tibble(p, post = post(p)) |>
+    ggplot(aes(x = p, y = post)) +
+        geom_line(linewidth = 0.8, colour = my_pal[1]) +
+        # shading the area over p0
+        geom_area(
+            data = \(x) x |> filter(p > p0),
+            colour = my_pal[1], fill = my_pal[1],
+            alpha = 0.5, show.legend = FALSE
+        ) +
+        annotate(
+            "label", x = 0.16, y = 1.5,
+            label = paste("P(H₀ | y) =", format(prob_h0, digits = 3)),
+            hjust = 0, colour = my_pal[1]
+        ) +
+        # annotate the significance level
+        geom_segment(
+            aes(x = signif, y = 0, xend = signif, yend = post(signif)),
+            colour = my_pal[3]
+        ) +
+        annotate(
+            "label", x = signif - 0.005, y = 1, label = "α = 0.05",
+            hjust = 1, colour = my_pal[3]
+        ) +
+        labs(
+            x = "Binomial probability p",
+            y = "Posterior distribution P(p | y)"
+        ) +
+        coord_cartesian(expand = FALSE, xlim = c(0, 0.5), ylim = c(0, 15))
+```
+
+Now, let’s redo the same hypothesis test in the classical frequentist way.
+We have to setup a null distribution: in this case it’s the binomial
+distribution with the probability parameter set to $p_0 = 0.15$, the
+failure rate of the traditional test.
+
+Next, we need to determine the probability of obtaining 6 or fewer
+incorrect screenings out of a total of 75, under the assumption that the
+null hypothesis is true, i.e. that the new test follows a binomial
+distribution with parameters $n=75$ and $p=0.15$.
+```{r}
+(pbinom(6, 75, 0.15))
+```
+This is bigger than the chosen significance level of 5%! So, a frequentist
+would reject the null hypothesis and say that we cannot claim with 95%
+confidence that the new test is better than the old one.
+
+```{r, fig.width = 8, fig.height = 6}
+tibble(
+    fails = 0:12,
+    prob = pbinom(fails, 75, 0.15),
+    test = ifelse(fails == 6, "new", "old")
+) |>
+    ggplot(aes(x = fails, y = prob)) +
+        geom_col(aes(fill = test)) +
+        scale_fill_manual(
+            values = c(old = my_pal[1], new = my_pal[2]),
+            guide = "none"
+        ) +
+        geom_hline(yintercept = 0.05, colour = my_pal[3]) +
+        annotate(
+            "text", x = 2, y = 0.05, vjust = -0.7, label = "Accept H₀"
+        ) +
+        annotate(
+            "text", x = 2, y = 0.05, vjust = 1.7, label = "Reject H₀"
+        ) +
+        annotate(
+            "label", x = 0, y = 0.05, hjust = 0,
+            label = "α = 0.05", colour = my_pal[3]
+        ) +
+        labs(x = "Failed detections y", y = "CDF(y | n = 75, p = 0.15)") +
+        scale_x_continuous(breaks = seq(0, 12, by = 3)) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 0.7))
+```
+
+The discrepancy with the Bayesian result can be attributed to the influence
+of the prior in the Bayesian analysis. The chosen prior is shifting the 
+posterior distribution slightly to the left, making it less probable for
+$p > p_0$ to exceed the 5% threshold.
