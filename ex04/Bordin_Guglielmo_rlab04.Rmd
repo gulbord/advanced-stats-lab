@@ -567,8 +567,8 @@ mean_a <- sum(alpha * post) * dab
 mean_b <- sum(beta * t(post)) * dab
 
 # standard deviations
-std_a <- sum((alpha - mean_a)^2 * post) * dab
-std_b <- sum((beta - mean_b)^2 * t(post)) * dab
+std_a <- sqrt(sum((alpha - mean_a)^2 * post) * dab)
+std_b <- sqrt(sum((beta - mean_b)^2 * t(post)) * dab)
 
 # cdfs
 cdf_a <- cumsum(rowSums(post)) * dab
@@ -678,7 +678,7 @@ What we’ll do first is exploring how the results vary with different
 signal widths $w$, keeping the same sampling range. Effectively, we’re 
 changing the sampling resolution.
 
-```{r}
+```{r, fig.width = 12, fig.height = 12}
 # generative model
 signal <- function(x, a, b, x0, w, t) {
     t * (a * exp(-(x - x0)^2 / (2 * w^2)) + b)
@@ -691,6 +691,7 @@ dt <- 5     # exposure time
 
 # vary signal width
 w_list <- c(0.1, 0.25, 1, 2, 3)
+nw <- length(w_list)
 
 # define sampling params for the posterior
 alim <- c(0, 4)
@@ -704,6 +705,13 @@ da <- a[2] - a[1]
 db <- b[2] - b[1]
 dab <- da * db
 
+# create vectors to hold results
+a_means <- rep(NA, nw) # means
+b_means <- rep(NA, nw)
+a_stds <- rep(NA, nw)  # standard deviations
+b_stds <- rep(NA, nw)
+rhos <- rep(NA, nw)    # covariances
+
 for (i in seq_along(w_list)) {
     w <- w_list[i]
     # photon positions
@@ -714,8 +722,8 @@ for (i in seq_along(w_list)) {
     # observed data
     dat <- rpois(length(sig), sig)
 
-    # compute the log-likelihood
-    logl <- outer(
+    # unnormalized log-posterior
+    post_ab <- outer(
         a, b, function(a, b) {
             purrr::reduce2(
                 dat, pos,
@@ -728,8 +736,260 @@ for (i in seq_along(w_list)) {
         }
     )
 
-    # normalize and get the posterior
-    exp_post <- exp(logl - max(logl))
-    post <- exp_post / (sum(exp_post) * dab)
+    # normalization
+    post_ab <- exp(post_ab - max(post_ab))
+    post_ab <- post_ab / (sum(post_ab) * dab)
+
+    # posterior P(A | B, D) using fixed true B
+    post_a <- sapply(
+        a, function(a) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a, b_true, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+    post_a <- exp(post_a - max(post_a))
+    post_a <- post_a / (sum(post_a) * da)
+
+    # posterior P(B | A, D) using fixed true A
+    post_b <- sapply(
+        b, function(b) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a_true, b, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+    post_b <- exp(post_b - max(post_b))
+    post_b <- post_b / (sum(post_b) * db)
+
+    # P(A | D) by marginalization over B
+    p_a <- rowSums(post_ab) * db
+    # P(B | D) by marginalization over A
+    p_b <- colSums(post_ab) * da
+
+    # compute moments and cov
+    a_means[i] <- ma <- sum(a * p_a) * da
+    b_means[i] <- mb <- sum(b * p_b) * db
+    a_stds[i] <- sa <- sqrt(sum((a - ma)^2 * p_a) * da)
+    b_stds[i] <- sb <- sqrt(sum((b - mb)^2 * p_b) * db)
+    rhos[i] <- sum(colSums((a - ma) * post_ab) * (b - mb)) * dab / (sa * sb)
+
+    # plotting
+    par(
+        mfrow = c(2, 2),
+        cex.lab = 1.5, cex.axis = 1.5,
+        cex.main = 1.5, cex.sub = 1.5
+    )
+
+    xplot <- seq(-7, 7, by = 0.05 * w)
+    splot <- signal(xplot, a_true, b_true, x0, w, dt)
+    # plot histogram of observed counts
+    plot(
+        pos - 0.25 * w, dat, type = "s", col = my_pal[3], lwd = 1.5,
+        xlim = c(-7, 7), ylim = range(c(splot, dat)),
+        xlab = "Position x", ylab = "Signal + Background counts",
+        main = paste("Signal width =", w)
+    )
+    # plot true signal as continuous line
+    lines(xplot, splot, type = "l", col = my_pal[1], lwd = 1.5)
+
+    # contour plot of P(A, B | D)
+    contour(
+        a, b, post_ab, nlevels = 5, col = viridisLite::viridis(5),
+        lwd = 1.5, xlab = "Amplitude A", ylab = "Background B"
+    )
+    abline(v = a_true, h = b_true, col = "grey60")
+
+    # marginalized posteriors
+    plot(
+        a, p_a, col = my_pal[1], type = "l", lwd = 1.5,
+        xlab = "Amplitude A", ylab = "Posterior probability"
+    )
+    lines(a, post_a, col = my_pal[2], type = "l", lwd = 1.5, lty = 2)
+    abline(v = a_true, col = "grey60")
+    plot(
+        b, p_b, col = my_pal[1], type = "l", lwd = 1.5,
+        xlab = "Background B", ylab = "Posterior probability"
+    )
+    lines(b, post_b, col = my_pal[2], type = "l", lwd = 1.5, lty = 2)
+    abline(v = b_true, col = "grey60")
 }
 ```
+
+```{r, echo = FALSE}
+tibble(w_list, a_means, a_stds, b_means, b_stds, rhos) |>
+    set_names(
+        "Signal width", "Mean A", "St. dev. A",
+        "Mean B", "St. dev. B", "Corr. coeff."
+    ) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    kableExtra::kbl() |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+If the signal is too wide, i.e. our sampling resolution is too large, we
+loose information and can’t separate the background as easily as with
+smaller $w$’s. The contour plots look much worse as $w$ increases, while 
+with the two smaller values the posterior is well-centred on the true 
+values of $A$ and $B$.
+
+Next, we can analyse what happens when we change the ratio between the 
+amplitude and the background used to simulate the data.
+
+```{r, fig.width = 12, fig.height = 12}
+# fix a value for w
+w <- 1
+pos <- seq(-7, 7, by = 0.5 * w)
+
+# vary a keeping b fixed to b_true
+a_list <- c(1, 2, 5, 10)
+
+# reset result vectors
+na <- length(a_list)
+a_means <- rep(NA, na)
+b_means <- rep(NA, na)
+a_stds <- rep(NA, na)
+b_stds <- rep(NA, na)
+rhos <- rep(NA, na)
+
+for (i in seq_along(a_list)) {
+    a_true <- a_list[i]
+    # change limits for a consequently
+    alim <- c(0, 2 * a_true)
+    # update sequence and differentials
+    a <- seq(alim[1], alim[2], length.out = nsamp)
+    da <- a[2] - a[1]
+    dab <- da * db
+
+    # true signal
+    sig <- signal(pos, a_true, b_true, x0, w, dt)
+    # observed data
+    dat <- rpois(length(sig), sig)
+
+    # unnormalized log-posterior
+    post_ab <- outer(
+        a, b, function(a, b) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a, b, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+
+    # normalization
+    post_ab <- exp(post_ab - max(post_ab))
+    post_ab <- post_ab / (sum(post_ab) * dab)
+
+    # posterior P(A | B, D) using fixed true B
+    post_a <- sapply(
+        a, function(a) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a, b_true, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+    post_a <- exp(post_a - max(post_a))
+    post_a <- post_a / (sum(post_a) * da)
+
+    # posterior P(B | A, D) using fixed true A
+    post_b <- sapply(
+        b, function(b) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a_true, b, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+    post_b <- exp(post_b - max(post_b))
+    post_b <- post_b / (sum(post_b) * db)
+
+    # P(A | D) by marginalization over B
+    p_a <- rowSums(post_ab) * db
+    # P(B | D) by marginalization over A
+    p_b <- colSums(post_ab) * da
+
+    # compute moments and cov
+    a_means[i] <- ma <- sum(a * p_a) * da
+    b_means[i] <- mb <- sum(b * p_b) * db
+    a_stds[i] <- sa <- sqrt(sum((a - ma)^2 * p_a) * da)
+    b_stds[i] <- sb <- sqrt(sum((b - mb)^2 * p_b) * db)
+    rhos[i] <- sum(colSums((a - ma) * post_ab) * (b - mb)) * dab / (sa * sb)
+
+    # plotting
+    par(
+        mfrow = c(2, 2),
+        cex.lab = 1.5, cex.axis = 1.5,
+        cex.main = 1.5, cex.sub = 1.5
+    )
+
+    xplot <- seq(-7, 7, by = 0.05 * w)
+    splot <- signal(xplot, a_true, b_true, x0, w, dt)
+    # plot histogram of observed counts
+    plot(
+        pos - 0.25 * w, dat, type = "s", col = my_pal[3], lwd = 1.5,
+        xlim = c(-7, 7), ylim = range(c(splot, dat)),
+        xlab = "Position x", ylab = "Signal + Background counts",
+        main = paste("Signal amplitude =", a_true)
+    )
+    # plot true signal as continuous line
+    lines(xplot, splot, type = "l", col = my_pal[1], lwd = 1.5)
+
+    # contour plot of P(A, B | D)
+    contour(
+        a, b, post_ab, nlevels = 5, col = viridisLite::viridis(5),
+        lwd = 1.5, xlab = "Amplitude A", ylab = "Background B"
+    )
+    abline(v = a_true, h = b_true, col = "grey60")
+
+    # marginalized posteriors
+    plot(
+        a, p_a, col = my_pal[1], type = "l", lwd = 1.5,
+        xlab = "Amplitude A", ylab = "Posterior probability"
+    )
+    lines(a, post_a, col = my_pal[2], type = "l", lwd = 1.5, lty = 2)
+    abline(v = a_true, col = "grey60")
+    plot(
+        b, p_b, col = my_pal[1], type = "l", lwd = 1.5,
+        xlab = "Background B", ylab = "Posterior probability"
+    )
+    lines(b, post_b, col = my_pal[2], type = "l", lwd = 1.5, lty = 2)
+    abline(v = b_true, col = "grey60")
+}
+```
+
+```{r, echo = FALSE}
+tibble(a_list, a_means, a_stds, b_means, b_stds, rhos) |>
+    set_names(
+        "Signal amplitude", "Mean A", "St. dev. A",
+        "Mean B", "St. dev. B", "Corr. coeff."
+    ) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    kableExtra::kbl() |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+As we could expect, if we amplify the signal with respect to the background,
+we get a posterior that is more sharply peaked around the true values.
