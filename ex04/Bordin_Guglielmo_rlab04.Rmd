@@ -13,6 +13,8 @@ output:
 knitr::opts_chunk$set(
     dev = "svg", fig.width = 8, fig.height = 5, message = FALSE
 )
+
+set.seed(42)
 ```
 
 # Insurance claims
@@ -465,7 +467,7 @@ of the prior in the Bayesian analysis. The chosen prior is shifting the
 posterior distribution slightly to the left, making it less probable for
 $p > p_0$ to exceed the 5% threshold.
 
-# The Lighthouse problem
+# The lighthouse problem
 A lighthouse is situated at a position $\alpha$ along the shore and a
 distance $\beta$ out to sea. The lighthouse emits a series of short, highly
 collimated flashes at random intervals and random angles. On the coast, we
@@ -502,22 +504,126 @@ probability of these two parameters given the observed flash positions, we
 will perform a Bayesian analysis.
 
 To simulate this scenario, we set the true values of $\alpha$ and $\beta$
-to be 0 km and 5 km, respectively. We sample the positions by generating
-them from a uniform distribution on the angles $\theta_k$.
+to be 1 km and 5 km, respectively. We sample the positions by generating
+them from a uniform distribution on the angles $\theta_k$. 
 
 ```{r}
-nflash <- 100
-a_true <- 0
+nflash <- 300
+a_true <- 1
 b_true <- 5
 
 data <- a_true + b_true * tan(runif(nflash, -pi, pi))
 ```
 
-Since we’re taking products to calculate the overall likelihood of the
-data, it’s more convenient to take the logarithm first and later
-exponentiate the log-posterior.
+Then, we define the grids for the $\alpha$ and $\beta$ parameters, and 
+assign a uniform prior to both. We assume $\alpha$ to be anywhere between
+-2 km and 2 km and $\beta$ anywhere between 1 km and 8 km.
+
 ```{r}
-log_lhood <- Reduce(
-    \(x, y) x - log(1 + ((y - alpha) / beta)^2), data, init = 0
+ngrid <- 500
+min_a <- -2
+max_a <- 2
+min_b <- 1
+max_b <- 9
+alpha <- seq(min_a, max_a, length.out = ngrid)
+beta <- seq(min_b, max_b, length.out = ngrid)
+```
+
+Now we come to the likelihood calculation. Since we’re taking products to
+get the overall likelihood of the data, it’s more convenient to take the
+logarithm first and later exponentiate the log-posterior.
+
+```{r}
+loglhood <- outer(
+    alpha, beta,
+    \(a, b) Reduce(
+        \(x, y) x + log(b) - log(b^2 + (y - a)^2), data, init = 0
+    )
 )
 ```
+
+Now we can proceed by exponentiating the log-likelihood and normalize the 
+result to get the posterior.
+```{r}
+# 2d step size
+dab <- (max_a - min_a) * (max_b - min_b) / ngrid^2
+# add max to avoid underflow
+lhood <- exp(loglhood - max(loglhood))
+# normalize
+post <- lhood / (sum(lhood) * dab)
+```
+
+Let’s compute the posterior moments and a 95% credibility interval, both
+for $\alpha$ and for $\beta$.
+
+```{r}
+# modes
+max_idx <- which(post == max(post), arr.ind = TRUE)
+mode_a <- alpha[max_idx[1]]
+mode_b <- beta[max_idx[2]]
+
+# means
+mean_a <- sum(alpha * post) * dab
+mean_b <- sum(beta * t(post)) * dab
+
+# standard deviations
+std_a <- sum((alpha - mean_a)^2 * post) * dab
+std_b <- sum((beta - mean_b)^2 * t(post)) * dab
+
+# cdfs
+cdf_a <- cumsum(rowSums(post)) * dab
+cdf_b <- cumsum(colSums(post)) * dab
+
+# credibility intervals
+thr <- c(0.025, 0.975)
+cred_a <- sapply(thr, \(x) alpha[which.max(cdf_a > x)])
+cred_b <- sapply(thr, \(x) beta[which.max(cdf_b > x)])
+```
+
+```{r, echo = FALSE}
+tribble(
+    ~var, ~mode, ~mean, ~std, ~cred,
+    "α", mode_a, mean_a, std_a,
+        paste(format(cred_a, digits = 2, nsmall = 2), collapse = ", "),
+    "β", mode_b, mean_b, std_b,
+        paste(format(cred_b, digits = 2, nsmall = 2), collapse = ", ")
+) |>
+    mutate_if(is.numeric, format, digits = 2, nsmall = 2) |>
+    set_names("Variable", "Mode", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+The results are quite good, knowing the true values of $\alpha$ and
+$\beta$.  We have to point out though that we’ve chosen a pretty lucky
+seed; in most runs with `nflash = 300` the credibility intervals easily
+fell outside the true values. Of course, the situation gets better as we
+increase `nflash`.
+
+We’ll make a contour plot with `ggplot`, so we’ll need to convert the data
+to a long-format tibble first.
+
+```{r}
+as.data.frame(post) |>
+    # add row index column
+    rowid_to_column("row") |>
+    pivot_longer(-row, names_to = "col", values_to = "post") |>
+    # add alpha and beta from row/col index
+    mutate(a = alpha[row], b = beta[as.numeric(gsub("V", "", col))]) |>
+    select(a, b, post) |>
+    # plotting
+    ggplot(aes(x = a, y = b, z = post)) +
+        geom_contour(aes(colour = after_stat(level)), linewidth = 0.8) +
+        scale_colour_viridis_c() +
+        labs(
+            x = "Position along the shore α",
+            y = "Distance out to sea β",
+            colour = "Posterior\nprobability"
+        ) +
+        scale_y_continuous(breaks = seq(min_b, max_b, length.out = 5)) +
+        coord_cartesian(
+            expand = FALSE, xlim = c(min_a, max_a), ylim = c(min_b, max_b)
+        )
+```
+
+# Signal over background
