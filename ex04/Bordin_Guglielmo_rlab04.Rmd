@@ -426,7 +426,7 @@ incorrect screenings out of a total of 75, under the assumption that the
 null hypothesis is true, i.e. that the new test follows a binomial
 distribution with parameters $n=75$ and $p=0.15$.
 ```{r}
-(pbinom(6, 75, 0.15))
+cat(pbinom(6, 75, 0.15))
 ```
 This is bigger than the chosen significance level of 5%! So, a frequentist
 would reject the null hypothesis and say that we cannot claim with 95%
@@ -464,3 +464,60 @@ The discrepancy with the Bayesian result can be attributed to the influence
 of the prior in the Bayesian analysis. The chosen prior is shifting the 
 posterior distribution slightly to the left, making it less probable for
 $p > p_0$ to exceed the 5% threshold.
+
+# The Lighthouse problem
+A lighthouse is situated at a position $\alpha$ along the shore and a
+distance $\beta$ out to sea. The lighthouse emits a series of short, highly
+collimated flashes at random intervals and random angles. On the coast, we
+have placed photo-detectors that record only the position $x_k$ of each
+flash's arrival, but not the angle of emission.
+
+We have recorded $N$ flashes at positions ${x_k}$, and our goal is to use
+this information to estimate the lighthouse's position.
+
+If we assign a uniform Likelihood PDF to the azimuth angle $\theta_k$,
+
+$$
+    P(\theta_k \;\vert\; \alpha, \beta) = \frac{1}{\pi},
+$$
+
+where $\theta_k$ is connected to $\alpha$ and $\beta$ by the relation
+
+$$
+    x_k - \alpha = \beta \tan\theta_k.
+$$
+
+If we then do a change of variables on the PDF we get
+
+$$
+    P(x \;\vert\; \alpha, \beta)
+        = \frac{\beta}{\pi[\beta^2 + (x - \alpha)^2]},
+$$
+
+which is a Cauchy distribution.
+
+Suppose that we do not know both the position along the shore $\alpha$ and
+the distance out to sea $\beta$. In order to estimate the posterior
+probability of these two parameters given the observed flash positions, we
+will perform a Bayesian analysis.
+
+To simulate this scenario, we set the true values of $\alpha$ and $\beta$
+to be 0 km and 5 km, respectively. We sample the positions by generating
+them from a uniform distribution on the angles $\theta_k$.
+
+```{r}
+nflash <- 100
+a_true <- 0
+b_true <- 5
+
+data <- a_true + b_true * tan(runif(nflash, -pi, pi))
+```
+
+Since we’re taking products to calculate the overall likelihood of the
+data, it’s more convenient to take the logarithm first and later
+exponentiate the log-posterior.
+```{r}
+log_lhood <- Reduce(
+    \(x, y) x - log(1 + ((y - alpha) / beta)^2), data, init = 0
+)
+```
