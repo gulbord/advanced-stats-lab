@@ -546,7 +546,7 @@ Now we can proceed by exponentiating the log-likelihood and normalize the
 result to get the posterior.
 ```{r}
 # 2d step size
-dab <- (max_a - min_a) * (max_b - min_b) / ngrid^2
+dab <- (alpha[2] - alpha[1]) * (beta[2] - beta[1])
 # add max to avoid underflow
 lhood <- exp(loglhood - max(loglhood))
 # normalize
@@ -627,3 +627,109 @@ as.data.frame(post) |>
 ```
 
 # Signal over background
+We have a signal, in terms of counts $\{N_k\}$ measured at values
+$\{x_k\}$, in the presence of a noisy background. We want to get the best
+estimate of the amplitude of the signal peak and of the background below.
+
+For instance, in case of a photon spectrum, we measure the amount of
+photons in bins of wavelength or energy. This number is proportional to the
+exposure time (i.e. how long the measurement lasts), and to both the signal
+and the background amplitudes through the expression
+
+$$
+    S_k = \Delta t
+    \Biggl\{
+        A \exp\Biggl[-\frac{(x_k - x_0)^2}{2 w^2}\Biggr] + B
+    \Biggr\}
+$$
+
+where $\Delta t$ is the exposure time, and $x_0$ and $w$ are the centre and
+width of the signal peak.
+
+$S_k$ is the number of expected photons, and it’s not generally an integer.
+Instead, the number of observed photons, $N_k$, is an integer number and
+follows the Poisson distribution:
+
+$$
+    P(N \;\vert\; S) = \frac{S^N e^{-S}}{N!},
+$$
+
+and this gives us the likelihood of the data $D = \{N_k\}$ as
+
+$$
+    P(D \;\vert\; A, B, M) = \prod_k \frac{S_k^{N_k} e^{-S_k}}{N_k!},
+$$
+
+where $M$ identifies the model (the shape of the line and the values of the
+fixed parameters).
+
+We assume that $x_0$, $w$ and $\Delta t$ are known, and that $A$ and $B$
+cannot be negative (that is, we set a uniform prior on the positive
+values). Therefore, in the posterior we’ll have only constant terms
+multiplying the likelihood as written above. To make calculations easier,
+we’ll take the logarithm:
+
+$$
+    \log P(A, B \;\vert\; D, M)
+        = \text{const} + \sum_k (N_k \log S_k - S_k)
+$$
+
+What we’ll do first is exploring how the results vary with different
+signal widths $w$, keeping the same sampling range. Effectively, we’re 
+changing the sampling resolution.
+
+```{r}
+# generative model
+signal <- function(x, a, b, x0, w, t) {
+    t * (a * exp(-(x - x0)^2 / (2 * w^2)) + b)
+}
+
+x0 <- 0     # signal peak
+a_true <- 2 # signal amplitude
+b_true <- 1 # background amplitude
+dt <- 5     # exposure time
+
+# vary signal width
+w_list <- c(0.1, 0.25, 1, 2, 3)
+
+# define sampling params for the posterior
+alim <- c(0, 4)
+blim <- c(0.5, 1.5)
+nsamp <- 100
+# a and b vectors
+a <- seq(alim[1], alim[2], length.out = nsamp)
+b <- seq(blim[1], blim[2], length.out = nsamp)
+# differentials
+da <- a[2] - a[1]
+db <- b[2] - b[1]
+dab <- da * db
+
+for (i in seq_along(w_list)) {
+    w <- w_list[i]
+    # photon positions
+    pos <- seq(-7, 7, by = 0.5 * w)
+
+    # true signal
+    sig <- signal(pos, a_true, b_true, x0, w, dt)
+    # observed data
+    dat <- rpois(length(sig), sig)
+
+    # compute the log-likelihood
+    logl <- outer(
+        a, b, function(a, b) {
+            purrr::reduce2(
+                dat, pos,
+                function(acc, n, x) {
+                    s <- signal(x, a, b, x0, w, dt)
+                    acc + n * log(s) - s
+                },
+                .init = 0
+            )
+        }
+    )
+
+    # normalize and get the posterior
+    exp_post <- exp(logl - max(logl))
+    post <- exp_post / (sum(exp_post) * dab)
+}
+```
