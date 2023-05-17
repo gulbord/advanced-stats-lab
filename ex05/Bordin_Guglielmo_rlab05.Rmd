@@ -1,0 +1,49 @@
+---
+title: R Laboratory – Exercise 5
+author: Guglielmo Bordin
+date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
+output:
+    prettydoc::html_pretty:
+        theme: architect
+        highlight: github
+        math: katex
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    dev = "svg", fig.width = 8, fig.height = 5, message = FALSE
+)
+
+set.seed(17052023)
+```
+
+# Deaths by horse kicks
+Ladislaus Josephovich Bortkiewicz was a Russian economist and statistician.
+He noted that the Poisson distribution can be very useful in applied
+statistics when describing low-frequency events in a large population. In a
+well-known example, he showed that the number of deaths by horse kicks in
+the Prussian army followed the Poisson distribution.
+
+Consider the following two sets of observations, taken over a fixed large
+time interval in two different corps:
+
+```{r, echo = FALSE}
+library(tidyverse)
+theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
+
+tibble::tribble(
+    ~"$y$ dead soldiers", ~"0", ~"1", ~"2", ~"3", ~"4", ~"≥ 5",
+    "$n_1$ observations",  109,   65,   22,    3,    1,      0,
+    "$n_2$ observations",  144,   91,   32,   11,    2,      0
+) |>
+    kableExtra::kbl() |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+We’ll assume a uniform prior, and compute the posterior distribution for 
+$\lambda$, the death rate over the measurement time. Let’s define a generic
+function for a Bayesian analysis of a Poisson process with a Gamma prior.
+
+```{r}
+baypois <- function(prior_alpha, prior_lambda) 1
+```
