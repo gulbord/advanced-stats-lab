@@ -40,10 +40,47 @@ tibble::tribble(
     kableExtra::kable_styling(full_width = FALSE)
 ```
 
+The two datasets are independent, so we can safely join them. Another
+option could be to analyse one before the other, taking the posterior
+from the first as prior for the second: but since we’ll be using Gamma
+priors, the update rule of the prior parameters,
+
+$$
+    \alpha_{\mathrm{post}} = \alpha_{\mathrm{prior}} + \sum_i y_i,
+    \quad
+    \lambda_{\mathrm{post}} = \alpha_{\mathrm{prior}} + n
+$$
+
+would give the same result as for the case with the two datasets lumped
+together.
+
 We’ll assume a uniform prior, and compute the posterior distribution for 
-$\lambda$, the death rate over the measurement time. Let’s define a generic
-function for a Bayesian analysis of a Poisson process with a Gamma prior.
+$\lambda$, the death rate over the measurement time. We’ll do the same also
+with a Jeffrey’s prior. 
 
 ```{r}
-baypois <- function(prior_alpha, prior_lambda) 1
+y <- c(
+    rep(0, 109), rep(1, 65), rep(2, 22), rep(3,  3), rep(4, 1),
+    rep(0, 144), rep(1, 91), rep(2, 32), rep(3, 11), rep(4, 2)
+)
+
+# define a common function to return the Bayes stuff
+# s = sum of observations
+# n = number of observations
+# pr_* = prior parameters
+baypois <- function(s, n, pr_alpha, pr_lambda) {
+    alpha <- pr_alpha + s
+    lambda <- pr_lambda + n
+    post <- function(x) dgamma(x, alpha, lambda)
+
+    median <- qgamma(0.5, alpha, lambda)
+    mean <- integrate(\(x) x * post(x), 0, Inf)$value
+    std <- integrate(\(x) (x - mean)^2 * post(x), 0, Inf)$value
+    cred <- sapply(c(0.025, 0.975), \(c) qgamma(c, alpha, lambda))
+
+    list(post = post, med = median, mean = mean, std = std, cred = cred)
+}
+
+unif <- baypois(sum(y), length(y), 1, 0)
+jeff <- baypois(sum(y), length(y), 0.5, 0)
 ```
