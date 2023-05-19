@@ -10,6 +10,10 @@ output:
 ---
 
 ```{r setup, include = FALSE}
+library(tidyverse)
+theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
+
+# knitr setup
 knitr::opts_chunk$set(
     dev = "svg", fig.width = 8, fig.height = 5, message = FALSE
 )
@@ -27,11 +31,9 @@ the Prussian army followed the Poisson distribution.
 Consider the following two sets of observations, taken over a fixed large
 time interval in two different corps:
 
-```{r, echo = FALSE}
-library(tidyverse)
-theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
 
-tibble::tribble(
+```{r, echo = FALSE}
+tribble(
     ~"$y$ dead soldiers", ~"0", ~"1", ~"2", ~"3", ~"4", ~"≥ 5",
     "$n_1$ observations",  109,   65,   22,    3,    1,      0,
     "$n_2$ observations",  144,   91,   32,   11,    2,      0
@@ -84,3 +86,96 @@ baypois <- function(s, n, pr_alpha, pr_lambda) {
 unif <- baypois(sum(y), length(y), 1, 0)
 jeff <- baypois(sum(y), length(y), 0.5, 0)
 ```
+
+Let’s put the results in a summary table and a plot.
+```{r, echo = FALSE}
+tibble(
+    prior = c("Uniform", "Jeffrey’s"),
+    med = c(unif$med, jeff$med),
+    mean = c(unif$mean, jeff$mean),
+    std = c(unif$std, jeff$std),
+    cred = c(
+        paste(format(unif$cred, digits = 3), collapse = ", "),
+        paste(format(jeff$cred, digits = 3), collapse = ", ")
+    )
+) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Median", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+The parameters of the two posteriors are almost identical, but we could 
+have expected it given the high number of observations (`r length(y)`).
+
+Since the distribution are basically overlapping, we’ll zoom in in the
+region
+
+```{r, fig.height = 6}
+my_pal <- wesanderson::wes_palette("Zissou1", 5)[c(1, 3, 5)]
+
+posts <- tibble(
+    lam = seq(0.5, 0.9, by = 0.0005),
+    unif = unif$post(lam), jeff = jeff$post(lam)
+) |>
+    pivot_longer(-lam, names_to = "dist", values_to = "prob") |>
+    mutate(dist = fct_relevel(dist, "unif", "jeff"))
+
+modes <- posts |>
+    group_by(dist) |>
+    summarize(mode = lam[which.max(prob)], pmax = max(prob))
+
+creds <- posts |>
+    group_by(dist) |>
+    filter(
+        lam > lam[which.max(cumsum(prob) * 0.0005 > 0.025)] &
+        lam < lam[which.max(cumsum(prob) * 0.0005 > 0.975)]
+    )
+
+posts |>
+    ggplot(aes(x = lam, y = prob)) +
+        geom_line(linewidth = 0.8, colour = my_pal[1]) +
+        geom_area(
+            data = creds,
+            fill = my_pal[1], alpha = 0.5,
+            position = "identity", show.legend = FALSE
+        ) +
+        geom_segment(
+            aes(x = mode, y = 0, xend = mode, yend = pmax),
+            data = modes, colour = my_pal[3], linewidth = 0.8
+        ) +
+        scale_colour_manual(
+            values = my_pal[c(1, 3)], labels = c("Uniform", "Jeffrey’s")
+        ) +
+        geom_label(
+            aes(x = mode, y = 0, label = paste("Mode =", mode)),
+            data = modes, hjust = -0.1, vjust = -0.3, colour = my_pal[3]
+        ) +
+        labs(
+            x = "Poisson parameter λ",
+            y = "Posterior probability P(λ | y)",
+        ) +
+        facet_wrap(
+            vars(dist), nrow = 2,
+            labeller = as_labeller(c(
+                unif = "With uniform prior",
+                jeff = "With Jeffrey’s prior"
+            ))
+        )
+```
+
+# Bacteria in water streams
+A study on water quality of streams determined that a high level of
+bacterium X was defined as a concentration exceeding 100 per 100 ml of
+stream water. A total of $n = 116$ samples were collected from streams with
+a significant environmental impact on pandas. Out of these samples, $y =
+11$ exhibited a high bacterium X level.
+
+First, let’s find the frequentist estimator for the probability $p$ that a
+sample of water taken from the stream has a high concentration of the
+bacterium. This is simply
+
+$$
+    \hat{p} = \frac{y}{n} = \frac{11}{116}
+            = `r format(11 / 116, digits = 3)`
+$$
