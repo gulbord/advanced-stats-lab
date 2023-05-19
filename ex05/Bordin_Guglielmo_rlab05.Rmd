@@ -177,5 +177,16 @@ bacterium. This is simply
 
 $$
     \hat{p} = \frac{y}{n} = \frac{11}{116}
-            = `r format(11 / 116, digits = 3)`
+            = `r format(11 / 116, digits = 3)`,
 $$
+
+with standard deviation
+
+$$
+    \operatorname{SD}[\hat{p}] = \sqrt{\frac{\hat{p} (1 - \hat{p})}{n}}
+        = `r format(sqrt(11 * (116 - 11) / 116) / 116, digits = 3)`
+$$
+
+Now, let’s turn to Bayesian analysis. We’ll use a $\operatorname{Beta}(1,
+10)$ prior for $p$, and find the posterior distribution with its mean,
+variance and 95% credibility interval.

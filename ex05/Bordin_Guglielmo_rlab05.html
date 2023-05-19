@@ -652,8 +652,16 @@ impact on pandas. Out of these samples, <span class="math inline">\(y =
 stream has a high concentration of the bacterium. This is simply</p>
 <p><span class="math display">\[
     \hat{p} = \frac{y}{n} = \frac{11}{116}
-            = 0.0948
+            = 0.0948,
 \]</span></p>
+<p>with standard deviation</p>
+<p><span class="math display">\[
+    \operatorname{SD}[\hat{p}] = \sqrt{\frac{\hat{p} (1 - \hat{p})}{n}}
+        = 0.0272
+\]</span></p>
+<p>Now, let’s turn to Bayesian analysis. We’ll use a <span class="math inline">\(\operatorname{Beta}(1, 10)\)</span> prior for
+<span class="math inline">\(p\)</span>, and find the posterior
+distribution with its mean, variance and 95% credibility interval.</p>
 </div>
     </section>
   </div>
