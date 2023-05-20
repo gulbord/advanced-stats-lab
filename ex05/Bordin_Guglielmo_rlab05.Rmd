@@ -4,7 +4,7 @@ author: Guglielmo Bordin
 date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
 output:
     prettydoc::html_pretty:
-        theme: architect
+        theme: cayman
         highlight: github
         math: katex
 ---
@@ -77,7 +77,7 @@ baypois <- function(s, n, pr_alpha, pr_lambda) {
 
     median <- qgamma(0.5, alpha, lambda)
     mean <- integrate(\(x) x * post(x), 0, Inf)$value
-    std <- integrate(\(x) (x - mean)^2 * post(x), 0, Inf)$value
+    std <- sqrt(integrate(\(x) (x - mean)^2 * post(x), 0, Inf)$value)
     cred <- sapply(c(0.025, 0.975), \(c) qgamma(c, alpha, lambda))
 
     list(post = post, med = median, mean = mean, std = std, cred = cred)
@@ -190,3 +190,369 @@ $$
 Now, let’s turn to Bayesian analysis. We’ll use a $\operatorname{Beta}(1,
 10)$ prior for $p$, and find the posterior distribution with its mean,
 variance and 95% credibility interval.
+
+```{r}
+y <- 11
+n <- 116
+
+# posterior is a beta with alpha = alpha_p + y, beta = beta_p + n - y
+post <- function(p) dbeta(p, 1 + y, 10 + n - y)
+
+dp <- 0.001
+p <- seq(0, 1, by = dp)
+
+mode <- p[which.max(post(p))]
+mean <- integrate(\(p) p * post(p), 0, 1)$value
+std <- sqrt(integrate(\(p) (p - mean)^2 * post(p), 0, 1)$value)
+cred <- qbeta(c(0.025, 0.975), 1 + y, 10 + n - y)
+```
+
+```{r, echo = FALSE}
+tibble(
+    prior = "Beta(1, 10)", mode = mode, mean = mean, std = std,
+    cred = paste(format(cred, digits = 3), collapse = ", ")
+) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Mode", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+```{r, fig.width = 9}
+data.frame(p = p[p < 0.5], fp = post(p[p < 0.5])) |>
+    ggplot(aes(x = p, y = fp)) +
+        geom_line(
+            aes(linetype = "post"),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        geom_line(
+            aes(y = dbeta(p, 1, 10), linetype = "prior"),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        geom_area(
+            data = \(df) df |> filter(p > cred[1] & p < cred[2]),
+            fill = my_pal[1], alpha = 0.5
+        ) +
+        geom_segment(
+            aes(x = mode, xend = mode, y = 0, yend = post(mode)),
+            linewidth = 0.6, colour = my_pal[3]
+        ) +
+        annotate(
+            "label", x = mode, y = 2.5, label = paste("Mode =", mode),
+            hjust = 1.05, colour = my_pal[3]
+        ) +
+        geom_segment(
+            aes(x = mean, xend = mean, y = 0, yend = post(mean)),
+            linewidth = 0.6, colour = my_pal[2]
+        ) +
+        annotate(
+            "label", x = mean, y = 5,
+            label = paste("Mean =", format(mean, digits = 3)),
+            hjust = -0.05, colour = my_pal[2]
+        ) +
+        scale_linetype_discrete(
+            labels = c("Posterior", "Beta(1, 10) prior")
+        ) +
+        labs(
+            x = "Binomial parameter p", y = "PDF for p",
+            linetype = element_blank()
+        )
+```
+
+We can now test the hypothesis
+
+$$
+    \text{$H_0$: } p = 0.1 \text{ versus $H_1$: } p \neq 0.1
+$$
+
+at a 5% level of significance, first in the frequentist way and then in the
+Bayesian one.
+
+In the frequentist approach, the null distribution is a binomial with $n =
+116$ and $p = 0.1$. We have to check whether $y = 11$ lies above or below
+the level of significance. 
+```{r}
+x <- 1:30
+nullpdf <- dbinom(x, n, 0.1)
+nullcdf <- pbinom(x, n, 0.1)
+
+# get interval ends
+sig1 <- x[max(which(nullcdf < 0.025))]
+sig2 <- x[min(which(nullcdf > 0.975))]
+```
+
+Given the discrete nature of the distribution, we’re actually looking at a
+`r paste0(format(100 * (pbinom(sig1, n, 0.1) + 1 - pbinom(sig2, n, 0.1)),
+digits = 2), "%")` significance level, but it’s the closest option to 5%
+with the current distribution.
+
+```{r}
+tibble(
+    data = x, prob = nullpdf,
+    flag = ifelse(x == y, "obs", ifelse(sig1 < x & x < sig2, "acc", "rej"))
+) |>
+    ggplot(aes(x = data, y = prob)) +
+        geom_col(aes(fill = flag), show.legend = FALSE) +
+        scale_fill_manual(
+            values = c(acc = my_pal[1], obs = my_pal[2], rej = my_pal[3]),
+        ) +
+        geom_vline(
+            xintercept = c(sig1 + 0.5, sig2 - 0.5), colour = my_pal[3]
+        ) +
+        annotate(
+            "label", label = "← Rej. H₀", colour = my_pal[3],
+            x = sig1 + 0.5, y = 0.05, hjust = 1.1
+        ) +
+        annotate(
+            "label", label = "Rej. H₀ →", colour = my_pal[3],
+            x = sig2 - 0.5, y = 0.05, hjust = -0.1
+        ) +
+        labs(
+            x = "Contaminated samples y",
+            y = paste0("Null distribution Binom(y | n = ", n, ", p = 0.1)"),
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 0.13))
+```
+
+So, the observed count of $y = 11$ is well within the acceptance region of
+the null hypothesis, so we have to reject the alternative hypothesis that
+$p \neq 0.1$ at a 5% level of significance.
+
+Let’s do it in the Bayesian way now. We have to find the credibility
+interval associated to the chosen significance level, and check whether
+$p_0 = 0.1$, the binomial probability of the null hypothesis, lies inside
+or outside the interval.
+```{r}
+p <- seq(0, 0.25, length.out = 1000)
+data.frame(
+    prob = p, post = post(p),
+    flag = ifelse(cred[1] < p & p < cred[2], "acc", "rej")
+) |>
+    ggplot(aes(x = prob, y = post)) +
+        geom_line(linewidth = 0.8, colour = my_pal[1]) +
+        # fill acceptance region
+        geom_area(
+            aes(y = ifelse(flag == "acc", post, 0)),
+            fill = my_pal[1], alpha = 0.5
+        ) +
+        # fill rejection region
+        geom_area(
+            aes(y = ifelse(flag == "rej", post, 0)),
+            fill = my_pal[3], alpha = 0.5
+        ) +
+        geom_segment(
+            aes(x = 0.1, xend = 0.1, y = 0, yend = post(0.1)),
+            colour = my_pal[2]
+        ) +
+        annotate(
+            "label", label = "p₀ = 0.1", x = 0.1, y = 5,
+            hjust = 1.1, colour = my_pal[2]
+        ) +
+        geom_vline(xintercept = cred, colour = my_pal[3]) +
+        annotate(
+            "label", label = "← Rej. H₀", colour = my_pal[3],
+            x = cred[1], y = 5, hjust = 1.1
+        ) +
+        annotate(
+            "label", label = "Rej. H₀ →", colour = my_pal[3],
+            x = cred[2], y = 5, hjust = -0.1
+        ) +
+        scale_fill_manual(values = c(acc = my_pal[1], rej = my_pal[3])) +
+        labs(
+            x = "Binomial parameter p",
+            y = "Posterior probability P(p | y, n)"
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 16.5))
+```
+
+As we could expect, the Bayesian test rejects the alternative hypothesis
+too. So according to both frameworks we can't say that $p \neq 0.1$ at a 5%
+level of significance. Indeed, we got pretty similar values in both the
+frequentist estimator and the mean/mode of the posterior distribution.
+
+Now, let’s consider a new measurement, performed one month later on $n' =
+165$ water samples, which saw $y' = 9$ samples with high concentration of
+the bacterium. Assuming that the probability of contamination might not be
+the same as one month ago, a frequentist would calculate a new value for 
+the estimator of $p$ as
+
+$$
+    \hat{p}' = \frac{y'}{n'} = \frac{9}{165}
+             = `r format(9 / 165, digits = 3)`,
+$$
+
+with standard deviation
+
+$$
+    \operatorname{SD}[\hat{p}'] = \sqrt{\frac{\hat{p}'(1 - \hat{p}')}{n'}}
+        = `r format(sqrt(9 * (165 - 9) / 165) / 165, digits = 3)`.
+$$
+
+Let’s conduct the Bayesian analysis now; in this case we can use the older
+measurement as our prior.
+
+```{r}
+alpha_pr <- 1 + y
+beta_pr <- 10 + n - y
+y <- 9
+n <- 165
+
+post <- function(p) dbeta(p, alpha_pr + y, beta_pr + n - y)
+
+dp <- 0.001
+p <- seq(0, 1, by = dp)
+
+mode <- p[which.max(post(p))]
+mean <- integrate(\(p) p * post(p), 0, 1)$value
+std <- sqrt(integrate(\(p) (p - mean)^2 * post(p), 0, 1)$value)
+cred <- qbeta(c(0.025, 0.975), alpha_pr + y, beta_pr + n - y)
+```
+
+```{r, echo = FALSE}
+tibble(
+    prior = paste0("Beta(", alpha_pr, ", ", beta_pr, ")"),
+    mode = mode, mean = mean, std = std,
+    cred = paste(format(cred, digits = 3), collapse = ", ")
+) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Mode", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
+```{r, fig.width = 9}
+data.frame(p = p[p < 0.3], fp = post(p[p < 0.3])) |>
+    ggplot(aes(x = p, y = fp)) +
+        geom_line(
+            aes(linetype = "post"),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        geom_line(
+            aes(y = dbeta(p, alpha_pr, beta_pr), linetype = "prior"),
+            linewidth = 0.8, colour = my_pal[1]
+        ) +
+        geom_area(
+            data = \(df) df |> filter(p > cred[1] & p < cred[2]),
+            fill = my_pal[1], alpha = 0.5
+        ) +
+        geom_segment(
+            aes(x = mode, xend = mode, y = 0, yend = post(mode)),
+            linewidth = 0.6, colour = my_pal[3]
+        ) +
+        annotate(
+            "label", x = mode, y = 2.5, label = paste("Mode =", mode),
+            hjust = 1.05, colour = my_pal[3]
+        ) +
+        geom_segment(
+            aes(x = mean, xend = mean, y = 0, yend = post(mean)),
+            linewidth = 0.6, colour = my_pal[2]
+        ) +
+        annotate(
+            "label", x = mean, y = 5,
+            label = paste("Mean =", format(mean, digits = 3)),
+            hjust = -0.05, colour = my_pal[2]
+        ) +
+        scale_linetype_discrete(
+            labels = c(
+                "Posterior",
+                paste0("Beta(", alpha_pr, ", ", beta_pr, ") prior")
+            )
+        ) +
+        labs(
+            x = "Binomial parameter p", y = "PDF for p",
+            linetype = element_blank()
+        )
+```
+
+Now, let’s perform the same hypothesis test as before. First, the
+frequentist way…
+
+```{r}
+x <- 1:35
+nullpdf <- dbinom(x, n, 0.1)
+nullcdf <- pbinom(x, n, 0.1)
+
+# get interval ends
+sig1 <- x[max(which(nullcdf < 0.025))]
+sig2 <- x[min(which(nullcdf > 0.975))]
+
+tibble(
+    data = x, prob = nullpdf,
+    flag = ifelse(x == y, "obs", ifelse(sig1 < x & x < sig2, "acc", "rej"))
+) |>
+    ggplot(aes(x = data, y = prob)) +
+        geom_col(aes(fill = flag), show.legend = FALSE) +
+        scale_fill_manual(
+            values = c(acc = my_pal[1], obs = my_pal[2], rej = my_pal[3]),
+        ) +
+        geom_vline(
+            xintercept = c(sig1 + 0.5, sig2 - 0.5), colour = my_pal[3]
+        ) +
+        annotate(
+            "label", label = "← Rej. H₀", colour = my_pal[3],
+            x = sig1 + 0.5, y = 0.05, hjust = 1.1
+        ) +
+        annotate(
+            "label", label = "Rej. H₀ →", colour = my_pal[3],
+            x = sig2 - 0.5, y = 0.05, hjust = -0.1
+        ) +
+        labs(
+            x = "Contaminated samples y",
+            y = paste0("Null distribution Binom(y | n = ", n, ", p = 0.1)"),
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 0.13))
+```
+
+The observed count of $y' = 9$ contaminated samples is still within the
+acceptance region of the null hypothesis, so we can’t reject $p = 0.1$ at
+the chosen significance level of 5%.
+
+Now, the Bayesian test.
+
+```{r, fig.width = 9}
+p <- seq(0, 0.2, length.out = 1000)
+data.frame(
+    prob = p, post = post(p),
+    flag = ifelse(cred[1] < p & p < cred[2], "acc", "rej")
+) |>
+    ggplot(aes(x = prob, y = post)) +
+        geom_line(linewidth = 0.8, colour = my_pal[1]) +
+        # fill acceptance region
+        geom_area(
+            aes(y = ifelse(flag == "acc", post, 0)),
+            fill = my_pal[1], alpha = 0.5
+        ) +
+        # fill rejection region
+        geom_area(
+            aes(y = ifelse(flag == "rej", post, 0)),
+            fill = my_pal[3], alpha = 0.5
+        ) +
+        geom_segment(
+            aes(x = 0.1, xend = 0.1, y = 0, yend = post(0.1)),
+            colour = my_pal[2]
+        ) +
+        annotate(
+            "label", label = "p₀ = 0.1", x = 0.1, y = 2.5,
+            hjust = 1.1, colour = my_pal[2]
+        ) +
+        geom_vline(xintercept = cred, colour = my_pal[3]) +
+        annotate(
+            "label", label = "← Rej. H₀", colour = my_pal[3],
+            x = cred[1], y = 10, hjust = 1.1
+        ) +
+        annotate(
+            "label", label = "Rej. H₀ →", colour = my_pal[3],
+            x = cred[2], y = 10, hjust = -0.1
+        ) +
+        scale_fill_manual(values = c(acc = my_pal[1], rej = my_pal[3])) +
+        labs(
+            x = "Binomial parameter p",
+            y = "Posterior probability P(p | y, n)"
+        ) +
+        coord_cartesian(expand = FALSE, ylim = c(0, 30))
+```
+
+The Bayesian test agrees once again with the frequentist one: we can’t
+reject the hypothesis $p = 0.1$ at the 5% significance level, since $p_0 =
+0.1$ lies inside the acceptance region under the curve of the posterior
+distribution.
