@@ -167,6 +167,67 @@ posts |>
         )
 ```
 
+## Deaths by horse kicks, but with `JAGS`
+Now we’ll repeat the previous analysis, but this time using a Markov Chain
+Monte Carlo sampling. We’ll rely on the `JAGS` library – and its R
+interface `rjags` – to build the chain and generate samples with the Gibbs
+method.
+```{r}
+library(rjags)
+
+model <- "model {
+    # data likelihood
+    for (i in 1:length(x)) {
+        x[i] ~ dpois(lambda)
+    }
+
+    # uniform prior for lambda
+    lambda ~ dexp(0.0001)
+
+    # predicted data, given lambda
+    y ~ dpois(lambda)
+}"
+
+data <- list(x = c(
+    rep(0, 109), rep(1, 65), rep(2, 22), rep(3,  3), rep(4, 1),
+    rep(0, 144), rep(1, 91), rep(2, 32), rep(3, 11), rep(4, 2)
+))
+
+# create the model
+jm <- jags.model(textConnection(model), data)
+# update the Markov chain (burn-in)
+update(jm, 1000)
+
+chain <- coda.samples(jm, c("lambda", "y"), n.iter = 1e5)
+plot(chain, col = "turquoise4", right = FALSE)
+```
+
+If we look at the posterior density, we get indeed something compatible
+with the previous results. Let’s check all the parameters.
+
+```{r}
+summary(chain)
+```
+
+And the previous results for comparison.
+
+```{r, echo = FALSE}
+tibble(
+    prior = c("Uniform", "Jeffrey’s"),
+    med = c(unif$med, jeff$med),
+    mean = c(unif$mean, jeff$mean),
+    std = c(unif$std, jeff$std),
+    cred = c(
+        paste(format(unif$cred, digits = 3), collapse = ", "),
+        paste(format(jeff$cred, digits = 3), collapse = ", ")
+    )
+) |>
+    mutate_if(is.numeric, format, digits = 3) |>
+    set_names("Prior", "Median", "Mean", "St. dev.", "95% cred. int.") |>
+    kableExtra::kbl(caption = "Posterior parameters") |>
+    kableExtra::kable_styling(full_width = FALSE)
+```
+
 # Bacteria in water streams
 A study on water quality of streams determined that a high level of
 bacterium X was defined as a concentration exceeding 100 per 100 ml of
