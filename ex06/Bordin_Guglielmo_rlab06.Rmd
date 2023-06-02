@@ -1,0 +1,199 @@
+---
+title: R Laboratory – Exercise 6
+author: Guglielmo Bordin
+date: "`r gsub('^0', '', format(Sys.Date(), '%d %B %Y'))`"
+output:
+    prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(kableExtra)
+theme_set(theme_minimal(base_size = 14, base_family = "Open Sans"))
+my_pal <- RColorBrewer::brewer.pal(3, "Dark2")
+
+# knitr setup
+knitr::opts_chunk$set(
+    dev = "svg", fig.width = 8, fig.height = 5,
+    message = FALSE, warning = FALSE
+)
+
+set.seed(02062023)
+```
+
+# COVID-19 and vaccination charts
+We’ll analyse the global vaccination dataset provided by “Our World in
+Data”, available at ```https://ourworldindata.org/covid-vaccinations```.
+
+```{r}
+data <- read_csv("owid-covid-data.csv")
+```
+
+The CSV file follows a format of one row per location and date, keeping
+track of many variables:
+
+```{r}
+spec(data)
+```
+
+The first thing that jumps out from a quick analysis of the `iso_code` and
+`location` columns is that, among all the countries and territories, there
+are also some “grouping” rows, e.g. low income or high income countries, or
+continents.
+
+```{r}
+data |>
+    select(iso_code, location) |>
+    filter(str_starts(iso_code, "OWID")) |>
+    distinct()
+```
+
+So, we could directly work with the `OWID_WRL` rows, and get the
+whole-world data. We’ll later make sure that it checks out if we take the
+longer route of putting together all the rows pertaining to real single
+locations.
+
+We’ll start with the vaccination data: let’s make a quick plot of the
+cumulative number of people who received at least one vaccine dose, per
+hundred (we find this in the `people_vaccinated_per_hundred` column).
+
+```{r}
+data |>
+    filter(location == "World") |>
+    select(date, people_vaccinated_per_hundred) |>
+    drop_na() |>
+    ggplot(aes(date, people_vaccinated_per_hundred)) +
+        geom_area(
+            linewidth = 0.8, alpha = 0.5,
+            colour = my_pal[1], fill = my_pal[1]
+        ) +
+        xlab("Date") +
+        ylab("Vaccinated population (%)")
+```
+
+Let’s see if we get the same plot by grouping the locations.
+
+```{r}
+data_no_owid <- data |> filter(!str_starts(iso_code, "OWID"))
+
+data_no_owid |>
+    drop_na(people_vaccinated, population) |>
+    group_by(date) |>
+    summarize(pvac = 100 * sum(people_vaccinated) / sum(population)) |>
+    ggplot(aes(date, pvac)) +
+        geom_point(size = 0.8, alpha = 0.5) +
+        geom_smooth(
+            span = 0.25, linewidth = 0.8,
+            colour = my_pal[2], fill = my_pal[2], alpha = 0.5
+        ) +
+        xlab("Date") +
+        ylab("Vaccinated population (%)")
+```
+
+As we can see, the trend is indeed similar. We can’t say much about the
+discrepancies, not knowing how the `OWID_WRL` data is constructed.
+
+Let’s examine now the distribution of new doses administered by day,
+smoothed over a seven-day period. We can find this data in the column
+`new_vaccinations_smoothed`.
+
+```{r}
+data_no_owid |>
+    drop_na(new_vaccinations_smoothed, population) |>
+    group_by(date) |>
+    summarize(
+        nvac = 100 * sum(new_vaccinations_smoothed) / sum(population)
+    ) |>
+    ggplot(aes(date, nvac)) +
+        geom_area(
+            linewidth = 0.8, alpha = 0.5,
+            fill = my_pal[1], colour = my_pal[1]
+        ) +
+        xlab("Date") +
+        ylab("New vaccinations (% of total population)")
+```
+
+We can also try a more interesting analysis by looking at the
+“Low/Middle/High Income” rows in the dataset, to see how higher income
+countries got hold of the vaccines sooner than the lower income ones. To
+avoid the double peaks of the second doses, we’ll look at the variable
+`new_people_vaccinated_smoothed`, which filters out the administrations of
+second or successive doses.
+
+```{r, fig.width = 10, fig.height = 6}
+data |>
+    filter(str_ends(location, "income")) |>
+    drop_na(new_people_vaccinated_smoothed) |>
+    select(date, location, vac = new_people_vaccinated_smoothed) |>
+    mutate(location = fct_relevel(
+        location,
+        "High income",
+        "Upper middle income",
+        "Lower middle income",
+        "Low income"
+    )) |>
+    ggplot(aes(date, vac)) +
+        geom_area(
+            aes(date, total),
+            data = function(x) {
+                x |> group_by(date) |>
+                     summarize(total = sum(vac))
+            }, colour = "grey40", fill = "grey80", alpha = 0.5
+        ) +
+        geom_area(
+            aes(colour = location, fill = location),
+            alpha = 0.5, position = "identity"
+        ) +
+        scale_y_continuous(
+            labels = scales::label_number(suffix = "M", scale = 1e-6)
+        ) +
+        scale_colour_viridis_d(option = "plasma", guide = "none") +
+        scale_fill_viridis_d(option = "plasma") +
+        labs(
+            x = "Date",
+            y = "First doses (7-day smoothed)",
+            fill = "Country income"
+        )
+```
+
+Let’s look at the death count now. First, the cumulative total.
+
+```{r}
+data_no_owid |>
+    drop_na(total_deaths) |>
+    group_by(date) |>
+    summarize(deaths = sum(total_deaths)) |>
+    ggplot(aes(date, deaths)) +
+        geom_area(
+            linewidth = 0.8, alpha = 0.5,
+            colour = my_pal[3], fill = my_pal[3]
+        ) +
+        scale_y_continuous(
+            breaks = scales::pretty_breaks(),
+            labels = scales::label_number(suffix = "M", scale = 1e-6),
+            limits = c(0, 8e6)
+        ) +
+        labs(x = "Date", y = "Total confirmed deaths")
+```
+
+And then, the weekly average (from the column `new_deaths_smoothed`).
+
+```{r}
+data_no_owid |>
+    drop_na(new_deaths_smoothed) |>
+    group_by(date) |>
+    summarize(deaths = sum(new_deaths_smoothed)) |>
+    ggplot(aes(date, deaths)) +
+        geom_area(
+            linewidth = 0.8, alpha = 0.5,
+            colour = my_pal[3], fill = my_pal[3]
+        ) +
+        scale_y_continuous(
+            breaks = scales::pretty_breaks(),
+            labels = scales::label_number(suffix = "k", scale = 1e-3)
+        ) +
+        labs(x = "Date", y = "Daily confirmed deaths (7-day smoothed)")
+```
