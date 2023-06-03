@@ -21,10 +21,175 @@ knitr::opts_chunk$set(
     message = FALSE, warning = FALSE
 )
 
-set.seed(02062023)
+set.seed(20230603)
 ```
 
-# COVID-19 and vaccination charts
+# Hand-made Markov Chain
+We are given the following un-normalized posterior distribution
+
+$$
+    g(\theta \; \mid \; x) \sim \frac{1}{2}
+        \exp\biggl[-\frac{(\theta + 3)^2}{2}\biggr] + \frac{1}{2}
+        \exp\biggl[-\frac{(\theta - 3)^2}{2}\biggr],
+$$
+
+and we want to draw a Markov Chain from it, using a Metropolis-Hastings
+algorithm.
+
+Let’s define the functions in R. We’ll choose a gaussian proposal
+distribution, with the standard deviation given as input from the user.
+
+```{r}
+posterior <- function(t) {
+    0.5 * exp(-0.5 * (t + 3)^2) + 0.5 * exp(-0.5 * (t - 3)^2)
+}
+
+metropolis <- function(target, proposal_std, niter, burn_in, thinning) {
+    chain <- numeric(niter)
+    x_old <- 0 # trial move
+    accepted <- 0
+
+    for (i in seq_along(chain)) {
+        # generate trial move
+        x_new <- rnorm(1, x_old, proposal_std)
+
+        # accept with metropolis test
+        acc_prob <- min(1, target(x_new) / target(x_old))
+        if (runif(1) < acc_prob) {
+            x_old <- x_new
+            accepted <- accepted + 1
+        }
+
+        # store result
+        chain[i] <- x_old
+    }
+
+    # discard burn-in and thin
+    chain <- chain[seq(burn_in, length(chain), by = thinning)]
+
+    list(chain = chain, acc_rate = accepted / niter)
+}
+```
+
+Let’s test the algorithm and display the results in a plot.
+
+```{r}
+std <- 1
+niter <- 1e5
+burn_in <- 1000
+thinning <- 10
+
+mc <- metropolis(posterior, std, niter, burn_in, thinning)
+
+cat("Acceptance rate =", mc$acc_rate)
+```
+
+```{r}
+true_func <- tibble(
+    theta = seq(-8, 8, by = 0.01),
+    # we've to normalize the posterior here
+    post = posterior(theta) / integrate(posterior, -8, 8)$value
+)
+
+tibble(chain = mc$chain) |>
+    ggplot(aes(x = chain)) +
+        geom_histogram(
+            aes(y = after_stat(density)),
+            binwidth = 0.2, fill = "#e6a452"
+        ) +
+        geom_line(
+            aes(x = theta, y = post),
+            data = true_func,
+            colour = "#945a10", linewidth = 0.8
+        ) +
+        labs(x = "θ", y = "Posterior g(θ | x)")
+```
+
+The agreement is good. Now, let’s analyse the chain with the `CODA` package
+and plot the chain autocorrelation.
+
+```{r}
+library(coda)
+
+chain <- as.mcmc(mc$chain)
+
+tibble(lag = seq(0, 500, by = 10), acor = autocorr(chain, lags = lag)) |>
+    ggplot(aes(lag, acor)) +
+        geom_hline(yintercept = 0, colour = "gray40", linetype = 2) +
+        geom_point(size = 2, colour = "#7b7bb4") +
+        geom_line(linewidth = 0.8, colour = "#7b7bb4") +
+        labs(x = "Lag", y = "ACF")
+```
+
+Let’s experiment with changing the burn-in cycle’s size, to see if there’s
+perhaps a better value than the one we have chosen initially, 1000.
+To analyse the performance, we’ll monitor both the acceptance rate and the
+effective size returned by `CODA`.
+
+```{r}
+purrr::map(
+    c(500, 750, 1000, 1500, 2000, 4000, 8000),
+    function(b) {
+        res <- metropolis(posterior, std, niter, b, thinning)
+        tibble(
+            burn_in = b,
+            acc_rate = res$acc_rate,
+            eff_size = effectiveSize(res$chain)
+        )
+    }
+) |> list_rbind() |> kbl() |> kable_styling(full_width = FALSE)
+```
+
+The effective size is quite low with every choice of `burn_in`, and doesn’t
+change much. We’ll stick with the initial choice of 1000 for simplicity.
+
+We can also try different values for the proposal distribution’s standard
+deviation and the thinning interval. The acceptance rate will only be
+affected by the standard deviation value, so we can check it separately,
+keeping the previous thinning value of 10.
+
+```{r}
+purrr::map(
+    c(0.5, 0.75, 1, 1.25, 1.5),
+    function(s) {
+        res <- metropolis(posterior, s, niter, burn_in, thinning)
+        tibble(
+            std = s,
+            acc_rate = res$acc_rate,
+            eff_size = effectiveSize(res$chain)
+        )
+    }
+) |> list_rbind() |> kbl() |> kable_styling(full_width = FALSE)
+```
+
+There’s a clear trade-off between the effective size and the acceptance
+rate: a wider proposal distribution leads to more uncorrelated samples, but
+it’s also “riskier”, lowering the acceptance rate. Let’s analyse the
+effective size to choose the best parameters.
+
+```{r}
+get_eff_size <- function(s, t) {
+    effectiveSize(metropolis(posterior, s, niter, burn_in, t)$chain)
+}
+
+expand_grid(
+    std = c(0.5, 0.75, 1, 1.25, 1.5),
+    thinning = c(5, 10, 20, 40, 80)
+) |>
+    mutate(eff_size = purrr::map2_dbl(std, thinning, get_eff_size)) |>
+    ggplot(aes(factor(std), factor(thinning))) +
+        geom_tile(aes(fill = eff_size)) +
+        scale_fill_viridis_c(name = "Effective size") +
+        labs(x = "Proposal standard deviation", y = "Thinning factor")
+```
+
+We can see that the thinning interval isn’t affecting the effective size as
+much as the standard deviation of the proposal distribution.  Probably the
+most sensible thing to do, given these results, is to raise the standard
+deviation a bit, to 1.25 or 1.5. The other parameters seem good enough with
+the chosen values.
+
+# COVID-19 charts
 We’ll analyse the global vaccination dataset provided by “Our World in
 Data”, available at ```https://ourworldindata.org/covid-vaccinations```.
 
