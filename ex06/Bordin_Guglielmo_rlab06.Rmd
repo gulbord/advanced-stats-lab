@@ -24,11 +24,11 @@ knitr::opts_chunk$set(
 set.seed(20230603)
 ```
 
-# Hand-made Markov Chain
+# Handmade Markov Chain
 We are given the following un-normalized posterior distribution
 
 $$
-    g(\theta \; \mid \; x) \sim \frac{1}{2}
+    g(\theta \: \vert \: x) \sim \frac{1}{2}
         \exp\biggl[-\frac{(\theta + 3)^2}{2}\biggr] + \frac{1}{2}
         \exp\biggl[-\frac{(\theta - 3)^2}{2}\biggr],
 $$
@@ -188,6 +188,164 @@ much as the standard deviation of the proposal distribution.  Probably the
 most sensible thing to do, given these results, is to raise the standard
 deviation a bit, to 1.25 or 1.5. The other parameters seem good enough with
 the chosen values.
+
+# COVID-19 vaccines efficacy
+We’ll analyse the initial test data reported on the European Medicines
+Agency website for the following early vaccines:
+
+- Jcovden (Janssen)
+- Pikevax (Moderna)
+- Vaxzeviria (AstraZeneca)
+
+We’ll do a bayesian analysis to determine the vaccine efficacy, defined as
+
+$$
+    E = \frac{R_\mathrm{p} - R_\mathrm{v}}{R_\mathrm{p}},
+$$
+
+where $R_\mathrm{p}$ is the rate of infection in a control (placebo) group
+and $R_\mathrm{v}$ the rate of infection in a vaccinated group.
+
+Let’s define a general function, and then proceed with the analysis of each
+vaccine. The process is binomial, and as a prior we can choose a `Beta(3,
+100)`, with an expected value for the infection frequency in line with what
+was found during the COVID pandemic.
+
+```{r}
+vaxtest <- function(tot_placebo, tot_vaccine, pos_placebo, pos_vaccine) {
+    # total number of positives and negatives
+    pos <- pos_vaccine + pos_placebo
+    neg <- tot_vaccine + tot_placebo - pos_vaccine - pos_placebo
+
+    # construct data list with test results and associated groups
+    data <- list(
+        test = c(rep(0, neg), rep(1, pos)),
+        group = c(
+            # negatives
+            rep(1, tot_placebo - pos_placebo),
+            rep(2, tot_vaccine - pos_vaccine),
+            # positives
+            rep(1, pos_placebo),
+            rep(2, pos_vaccine)
+        )
+    )
+
+    # jags model string
+    model <- "
+        model {
+            for (i in 1:length(test)) {
+                test[i] ~ dbern(theta[group[i]])
+            }
+
+            theta[1] ~ dbeta(3, 100) # placebo prior
+            theta[2] ~ dbeta(3, 100) # vaccine prior
+        }
+    "
+
+    # build and run the model with jags (4 parallel chains)
+    runjags::run.jags(
+        model = model,
+        data = data,
+        sample = 15000,
+        burnin = 2000,
+        n.chains = 4,
+        method = "parallel",
+        monitor = "theta"
+    ) |>
+        # tidy up the result in a tibble
+        tidybayes::tidy_draws() |>
+        dplyr::transmute(
+            placebo = 100 * `theta[1]`,
+            vaccine = 100 * `theta[2]`,
+            efficacy = 100 * (1 - `theta[2]` / `theta[1]`)
+        ) |>
+        coda::as.mcmc()
+}
+```
+
+Let’s also define a plotting function, using the package `bayesplot`.
+
+```{r}
+vaxplot <- function(chain, pars) {
+    bayesplot::mcmc_areas(
+        chain, pars = pars, prob = 0.95, point_est = "mean"
+    ) +
+        ggplot2::labs(
+            title = "Posterior distribution",
+            subtitle = "with mean and 95% credibility interval",
+            x = "Percentage"
+        ) +
+        bayesplot::theme_default(base_size = 14, base_family = "Open Sans")
+}
+```
+
+## Janssen’s vaccine
+Let’s start with Janssen’s vaccine, “Jcovden”. According to the EMA, 
+
+> The trial found a 67% reduction in the number of symptomatic COVID-19
+> cases after 2 weeks in people who received Jcovden (116 cases out of
+> 19,630 people) compared with people given placebo (348 of 19,691 people).
+> This means that the vaccine had a 67% efficacy.
+
+```{r}
+janssen <- vaxtest(19691, 19630, 348, 116)
+
+summary(janssen)
+```
+
+Now, let’s plot the infection rate posteriors for both the control group
+and the vaccinated group.
+
+```{r}
+vaxplot(janssen, pars = c("placebo", "vaccine"))
+```
+
+And finally, the efficacy.
+
+```{r}
+vaxplot(janssen, pars = "efficacy")
+```
+
+## Moderna’s vaccine
+Now we move to Moderna’s vaccine, called “Pikevax”. The EMA states
+
+> The trial showed a 94.1% reduction in the number of symptomatic COVID-19
+> cases in the people who received the vaccine (11 out of 14,134 vaccinated
+> people got COVID-19 with symptoms) compared with people who received
+> dummy injections (185 out of 14,073 people who received dummy injections
+> got COVID-19 with symptoms). This means that the vaccine demonstrated a
+> 94.1% efficacy in the trial.
+
+```{r}
+moderna <- vaxtest(14073, 14134, 185, 11)
+
+summary(moderna)
+```
+
+And the plots like before.
+
+```{r}
+vaxplot(moderna, pars = c("placebo", "vaccine"))
+vaxplot(moderna, pars = "efficacy")
+```
+
+## AstraZeneca’s vaccine
+Finally, the “Vaxzeviria” from AstraZeneca. The EMA says
+
+> These showed a 59.5% reduction in the number of symptomatic COVID-19
+> cases in people given the vaccine (64 of 5,258 got COVID-19 with
+> symptoms) compared with people given control injections (154 of 5,210 got
+> COVID-19 with symptoms). This means that the vaccine demonstrated around
+> a 60% efficacy in these clinical trials.
+
+```{r}
+astrazeneca <- vaxtest(5210, 5258, 154, 64)
+
+summary(astrazeneca)
+
+vaxplot(astrazeneca, pars = c("placebo", "vaccine"))
+vaxplot(astrazeneca, pars = "efficacy")
+```
 
 # COVID-19 charts
 We’ll analyse the global vaccination dataset provided by “Our World in
